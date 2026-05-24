@@ -187,13 +187,148 @@ type: feat | fix | refactor | test | docs | chore
 
 ---
 
-## 10. 测试要求
+## 10. TDD 开发模式
+
+**核心原则**：测试通过公共接口验证行为，不验证实现细节。代码可以完全重构，测试不应随之失效。
+
+### 10.1 工作流程
+
+```
+RED:   写一个测试 → 测试失败
+GREEN: 写最小代码通过测试 → 测试通过
+REFACTOR: 重构 → 测试保持绿色
+```
+
+**垂直切片方式**（正确）：
+```
+RED→GREEN: test1 → impl1
+RED→GREEN: test2 → impl2
+RED→GREEN: test3 → impl3
+...
+```
+
+**禁止水平切片**（错误）：
+```
+RED:   一次写完所有测试
+GREEN: 一次写完所有实现
+```
+
+### 10.2 测试分层
+
+| 层级 | 工具 | 说明 |
+|------|------|------|
+| 单元测试 | JUnit 5 + Mockito | Service 业务逻辑 |
+| Web 层测试 | MockMvc | Controller 接口 |
+| 集成测试 | SpringBootTest | 端到端验证 |
+| 持久层测试 | DataJpaTest | Repository |
+
+### 10.3 后端测试模板
+
+**单元测试（Service）**：
+```java
+@ExtendWith(MockitoExtension.class)
+class XxxServiceTest {
+    @Mock XxxRepository repo;
+    @InjectMocks XxxService service;
+
+    @Test
+    void should_xxx_when_xxx() {
+        // Arrange - 准备测试数据
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // Act - 执行被测方法
+        Xxx result = service.xxx();
+
+        // Assert - 验证结果
+        assertThat(result.getXxx()).isEqualTo("expected");
+        verify(repo).save(any());
+    }
+}
+```
+
+**Web 层测试（Controller）**：
+```java
+@WebMvcTest(XxxController.class)
+class XxxControllerTest {
+    @Autowired MockMvc mockMvc;
+    @MockBean XxxService xxxService;
+
+    @Test
+    void should_return_xxx_when_get() throws Exception {
+        when(xxxService.list()).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/xxx"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data").isArray());
+    }
+}
+```
+
+**集成测试**：
+```java
+@SpringBootTest
+@AutoConfigureMockMvc
+@ActiveProfiles("test")
+class XxxIntegrationTest {
+    @Autowired MockMvc mockMvc;
+
+    @Test
+    void should_create_xxx() throws Exception {
+        mockMvc.perform(post("/api/v1/xxx")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+              {"name":"Test","type":"LIST_DETAIL"}
+              """))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.data.name").value("Test"));
+    }
+}
+```
+
+### 10.4 测试覆盖率目标
 
 | 层级 | 目标覆盖率 |
 |------|-----------|
 | Service | >80% |
 | Repository | >70% |
 | Controller | >70% |
+
+### 10.5 测试数据构建器
+
+```java
+class CrawlConfigBuilder {
+    private String name = "测试配置";
+    private String pageType = "LIST_DETAIL";
+    private String startUrl = "https://example.com";
+
+    CrawlConfigBuilder withName(String name) { this.name = name; return this; }
+    CrawlConfigBuilder withPageType(String type) { this.pageType = type; return this; }
+    CrawlConfig build() { return new CrawlConfig(null, name, pageType, startUrl, "ACTIVE"); }
+}
+```
+
+### 10.6 Testcontainers（集成测试）
+
+```java
+@DataJpaTest
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+@Import(TestContainersConfig.class)
+class XxxRepositoryTest {
+    // 使用真实 PostgreSQL 容器进行测试
+}
+```
+
+### 10.7 验证命令
+
+```bash
+# 后端完整验证
+cd backend
+mvn clean test          # 运行所有测试
+mvn test jacoco:report   # 生成覆盖率报告
+
+# 验证覆盖率达标
+mvn verify
+```
 
 ---
 
