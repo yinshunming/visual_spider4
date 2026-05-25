@@ -12,7 +12,7 @@
 
 | 维度 | 旧设计 | 新设计 |
 |------|--------|--------|
-| 选择器配置 | 用户手动输入 CSS/XPath | 内嵌浏览器 + 点击自动生成 + 手动补充 |
+| 选择器配置 | 用户手动输入 CSS/XPath | 后端 Playwright 浏览器会话 + 点击自动生成 + 手动补充 |
 | 字段映射 | 固定字段（title, content, author...） | 用户自定义字段名 + 类型 + 选择器 |
 | 数据存储 | 固定表结构，多张关联表 | JSON 列存储自定义字段 |
 | 页面字段管理 | 统一管理 | 列表页字段 / 详情页字段分开管理 |
@@ -22,8 +22,10 @@
 
 | 模式 | 触发条件 | 数据流向 |
 |------|----------|----------|
-| 模式一 | 配置了列表页字段 + 详情页字段 | 起始URL → 列表页 → 详情页 → 数据 |
+| 模式一 | 配置了列表页字段 + 详情页字段 | 起始URL → 列表页 → **多个列表项** → 详情页 → 数据 |
 | 模式二 | 只有详情页字段（列表页字段为空） | 用户输入URL列表 → 直接详情页 → 数据 |
+
+**模式一说明**：一个列表页（list_page）包含多个列表项（list_item）。每个列表项有 detail_url 和可选的列表字段（如标题、发布日期）。详情页数据存储在 article 表中，通过 list_item.detail_url 关联。
 
 ---
 
@@ -33,11 +35,12 @@
 
 | 分层 | 技术 | 说明 |
 |------|------|------|
-| 前端 | Vue3 + Vite + Element Plus + Axios | 前后端分离 |
-| 后端 | Spring Boot 3.x + Spring Data JPA | Java 后端 |
+| 前端 | Vue3 + Vite + Element Plus + Axios + WebSocket | 前后端分离，浏览器远程控制界面 |
+| 后端 | Spring Boot 3.x + Spring Data JPA | Java 后端，API 服务；本地进程直接启动 Playwright |
 | 数据库 | PostgreSQL | 关系型数据库 |
-| 爬虫 | Jsoup (HTML 解析) + Spring WebClient | HTTP 客户端 |
-| 内嵌浏览器 | Playwright | 前端内嵌，点击生成选择器 |
+| 爬虫引擎 | Playwright (动态页面) + Jsoup (静态HTML/重新解析) | 后端控制的真实浏览器 |
+| 选择器 | CSS + XPath | 双重支持 |
+| 浏览器画面通道 | WebSocket | 后端推送浏览器截图帧、加载状态和错误信息 |
 
 ### 2.2 系统架构图
 
@@ -52,7 +55,7 @@
 │                    ┌─────▼─────┐                          │
 │                    │   Axios   │                          │
 └────────────────────┼───────────┼────────────────────────────┘
-                      │ HTTP REST │
+                    │ HTTP REST + WebSocket │
 ┌────────────────────┼───────────┼────────────────────────────┐
 │              ┌─────▼─────┐    │     后端 (Spring Boot)       │
 │              │   API     │    │                             │
@@ -72,8 +75,17 @@
 │    │     │    │  └─────────┘  └─────────┘  │    │        │
 │    │     │    └───────────────┬────────────┘    │        │
 │    │     │                    │                    │        │
+│    │     │         ┌──────────▼──────────┐       │        │
+│    │     │         │  Playwright 浏览器会话  │       │        │
+│    │     │         │  (本地后端启动，单用户单会话) │    │        │
+│    │     │         │  - 页面加载             │       │        │
+│    │     │         │  - JS渲染DOM等待        │       │        │
+│    │     │         │  - CSS/XPath提取        │       │        │
+│    │     │         │  - 点击生成选择器       │       │        │
+│    │     │         └──────────┬──────────┘       │        │
 │    │     │              ┌─────▼─────┐              │        │
-│    │     │              │  Jsoup    │  爬虫引擎    │        │
+│    │     │              │  Jsoup    │ (静态HTML/    │        │
+│    │     │              │           │  重新解析)    │        │
 │    │     │              └───────────┘              │        │
 │    │     └───────────────────────────────────────┘        │
 └────┼───────────────────────────────────────────────────────┘
@@ -81,12 +93,12 @@
 ┌────▼────────────────────────────────────────────────────────┐
 │                      PostgreSQL                             │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐ │
-│  │crawl_config│ │crawl_field│  │ list_page│  │crawl_task│ │
+│  │crawl_config│ │crawl_field│  │ list_item │  │crawl_task│ │
 │  └──────────┘  └──────────┘  └──────────┘  └──────────┘ │
 │                                                          │
-│  ┌──────────┐                                             │
-│  │ article  │  (custom_fields 以 JSONB 存储)            │
-│  └──────────┘                                             │
+│  ┌──────────┐  ┌──────────┐                              │
+│  │ list_page│  │ article  │  (custom_fields JSONB存储)  │
+│  └──────────┘  └──────────┘                              │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -149,8 +161,22 @@
 | config_id | BIGINT FK | 关联配置ID |
 | task_id | BIGINT FK | 关联任务ID |
 | url | TEXT | 列表页 URL |
-| raw_html | TEXT | 原始 HTML |
-| custom_fields | JSONB | 用户自定义的列表页字段 |
+| raw_html | TEXT | 原始 HTML（保留完整页面，用于回溯重新解析） |
+| status | VARCHAR(20) | 状态：PENDING / CRAWLED / FAILED |
+| error_message | TEXT | 错误信息 |
+| created_at | TIMESTAMP | 创建时间 |
+
+**说明**：`list_page` 存储列表页本身，不存储列表项。列表页包含多个列表项（list_item），每个列表项通过 `detail_url` 字段关联到文章详情。
+
+#### 3.1.4 列表项数据表 `list_item`
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | BIGINT PK | 主键 |
+| list_page_id | BIGINT FK | 关联列表页ID |
+| config_id | BIGINT FK | 关联配置ID |
+| detail_url | TEXT | 详情页 URL（必填） |
+| custom_fields | JSONB | 用户自定义的列表页字段（不含 detail_url） |
 | status | VARCHAR(20) | 状态：PENDING / CRAWLED / FAILED |
 | error_message | TEXT | 错误信息 |
 | created_at | TIMESTAMP | 创建时间 |
@@ -160,19 +186,20 @@
 ```json
 {
   "文章标题": "勇士击败湖人晋级决赛",
-  "发布日期": "2026-05-24",
-  "detail_url": "https://sports.sina.com.cn/nba/2026-05-24/xxxx.html"
+  "发布日期": "2026-05-24"
 }
 ```
 
-#### 3.1.4 文章详情表 `article`
+**list_item 与 list_page 的关系**：一个 list_page 包含多个 list_item。列表页的 raw_html 保留用于回溯重新解析；list_item 通过 detail_url 指向详情页。
+
+#### 3.1.5 文章详情表 `article`
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | BIGINT PK | 主键 |
 | config_id | BIGINT FK | 关联配置ID |
 | task_id | BIGINT FK | 关联任务ID |
-| list_page_id | BIGINT FK | 关联列表页ID（可为空，DETAIL_ONLY模式时为空） |
+| list_item_id | BIGINT FK | 关联列表项ID（可为空，DETAIL_ONLY模式时为空） |
 | url | TEXT | 文章 URL |
 | raw_html | TEXT | 原始 HTML |
 | custom_fields | JSONB | 用户自定义的详情页字段 |
@@ -192,7 +219,7 @@
 }
 ```
 
-#### 3.1.5 爬取任务表 `crawl_task`
+#### 3.1.6 爬取任务表 `crawl_task`
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -206,7 +233,7 @@
 | started_at | TIMESTAMP | 开始时间 |
 | completed_at | TIMESTAMP | 结束时间 |
 
-#### 3.1.6 直接详情URL表 `detail_url`（仅 DETAIL_ONLY 模式使用）
+#### 3.1.7 直接详情URL表 `detail_url`（仅 DETAIL_ONLY 模式使用）
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -226,7 +253,8 @@ crawl_config (1) ──── (N) article
 crawl_task (1) ──── (N) list_page
 crawl_task (1) ──── (N) article
 crawl_task (1) ──── (N) detail_url
-list_page (1) ──── (N) article
+list_page (1) ──── (N) list_item
+list_item (1) ──── (N) article
 ```
 
 ### 3.3 设计原则
@@ -234,7 +262,8 @@ list_page (1) ──── (N) article
 - **crawl_field 独立存储**：字段配置与爬虫配置分离，方便编辑
 - **custom_fields JSONB 存储**：用户自定义字段以 JSON 存储，灵活扩展
 - **raw_html 保留**：原始 HTML 完整保留，支持重新解析
-- **list_page 可为空**：DETAIL_ONLY 模式下，列表页数据为空
+- **list_page 与 list_item 分离**：list_page 存储列表页本身；list_item 存储列表中的每个条目（含 detail_url 和列表字段）
+- **DETAIL_ONLY 模式**：不使用 list_page/list_item，直接通过 detail_url 列表爬取
 
 ---
 
@@ -281,10 +310,14 @@ list_page (1) ──── (N) article
 - 页面类型选择（LIST_DETAIL / DETAIL_ONLY）
 - 选择器类型切换（CSS / XPath）
 
-**中间：内嵌浏览器区域**
-- 集成 Playwright 内嵌浏览器
-- 用户输入起始 URL 后，在浏览器中打开
-- 点击页面元素，自动生成选择器
+**中间：浏览器控制区域**
+- 后端 Playwright 浏览器会话控制真实浏览器
+- MVP 为单用户单会话：同一时间只维护一个 Playwright 浏览器会话
+- 前端通过后端 REST API 控制浏览器：打开页面、点击元素、提取选择器
+- 后端通过 WebSocket 向前端推送浏览器截图帧、加载状态和错误信息
+- 用户输入起始 URL 后，后端本地 Spring Boot 进程启动/复用 Playwright 页面并加载目标站点
+- 点击页面元素，后端生成对应的 CSS/XPath 选择器
+- 支持动态页面（JS渲染后的DOM）
 
 **字段配置区域：**
 
@@ -381,18 +414,38 @@ list_page (1) ──── (N) article
 |------|------|------|
 | GET | `/list-pages` | 获取列表页数据（分页） |
 | GET | `/list-pages/:id` | 获取单条列表页 |
-| POST | `/list-pages/:id/reparse` | 重新解析列表页 |
+| POST | `/list-pages/:id/reparse` | 重新解析列表页（使用 Jsoup） |
 | DELETE | `/list-pages/:id` | 删除列表页 |
 
-### 5.6 文章数据 API
+### 5.6 列表项数据 API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/list-items` | 获取列表项数据（分页，可按 list_page_id 筛选） |
+| GET | `/list-items/:id` | 获取单条列表项 |
+| DELETE | `/list-items/:id` | 删除列表项 |
+
+### 5.7 文章数据 API
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/articles` | 获取文章列表（分页+搜索，动态列） |
 | GET | `/articles/:id` | 获取文章详情 |
-| POST | `/articles/:id/reparse` | 重新解析文章 |
+| POST | `/articles/:id/reparse` | 重新解析文章（使用 Jsoup） |
 | DELETE | `/articles/:id` | 删除文章 |
 | POST | `/articles/export` | 导出文章（Excel/JSON） |
+
+### 5.8 浏览器会话 API（后端 Playwright 控制）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/browser/open` | 打开浏览器会话，加载指定URL |
+| POST | `/browser/click` | 点击页面元素，返回生成的选择器 |
+| POST | `/browser/extract` | 使用选择器从当前DOM提取字段值 |
+| POST | `/browser/close` | 关闭浏览器会话 |
+| WS | `/ws/browser` | 推送浏览器截图帧、加载状态和错误信息 |
+
+**说明**：浏览器会话由本地 Spring Boot 进程直接启动和控制 Playwright。MVP 只支持单用户单会话：重复打开页面时复用当前会话或先关闭旧会话。REST API 负责控制动作；WebSocket 负责向前端实时推送浏览器画面和状态。
 
 ---
 
@@ -458,8 +511,27 @@ public class ListPage {
     private Long configId;
     private Long taskId;
     private String url;
-    private String rawHtml;
-    private String customFields;    // JSON字符串
+    private String rawHtml;        // 保留原始HTML，用于回溯重新解析
+    private String status;          // PENDING / CRAWLED / FAILED
+    private String errorMessage;
+    private LocalDateTime createdAt;
+}
+```
+
+#### ListItem.java
+
+```java
+@Entity
+@Table(name = "list_item")
+public class ListItem {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private Long listPageId;       // 关联列表页
+    private Long configId;
+    private String detailUrl;      // 详情页URL（必填）
+    private String customFields;    // JSON字符串，列表页自定义字段
     private String status;          // PENDING / CRAWLED / FAILED
     private String errorMessage;
     private LocalDateTime createdAt;
@@ -478,7 +550,7 @@ public class Article {
 
     private Long configId;
     private Long taskId;
-    private Long listPageId;        // 可为空
+    private Long listItemId;        // 关联列表项（可为空，DETAIL_ONLY模式）
     private String url;
     private String rawHtml;
     private String customFields;    // JSON字符串，用户自定义字段
@@ -535,10 +607,12 @@ public class DetailUrl {
 | 组件 | 技术 | 说明 |
 |------|------|------|
 | HTTP 客户端 | Spring WebClient | 异步非阻塞 |
-| HTML 解析 | Jsoup | 支持 CSS + XPath |
+| 动态页面引擎 | Playwright (后端控制) | 真实浏览器加载，等待JS渲染，支持CSS/XPath提取 |
+| 静态HTML解析 | Jsoup | 仅用于 raw_html 重新解析，或简单静态页面 |
+| 浏览器画面通道 | WebSocket | 推送截图帧、页面加载状态和错误信息 |
 | 线程控制 | ThreadPoolExecutor | 传统线程池，支持任务并发控制 |
 | 任务状态 | AtomicBoolean flag | 支持优雅停止 |
-| 内嵌浏览器 | Playwright | 前端集成，点击生成选择器 |
+| 选择器生成 | Playwright 点击元素 | 后端浏览器会话中点击，生成 CSS/XPath 选择器 |
 
 ### 7.2 核心流程
 
@@ -554,19 +628,23 @@ public class DetailUrl {
 └──────────────────────────┬─────────────────────────────────┘
                            ▼
 ┌────────────────────────────────────────────────────────────┐
-│  2. 爬取列表页 → 存入 list_page (status=PENDING)          │
-│     custom_fields 存储用户自定义字段                        │
+│  2. 后端 Playwright 爬取列表页 → 存入 list_page          │
+│     raw_html 存储原始页面，支持回溯重新解析                 │
+│     等待 JS 渲染完成后的 DOM                              │
 └──────────────────────────┬─────────────────────────────────┘
                            ▼
 ┌────────────────────────────────────────────────────────────┐
-│  3. 遍历 list_page → 检查停止 flag                        │
-│     从 custom_fields.detail_url 提取详情页 URL             │
+│  3. 解析列表页 → 存入多个 list_item                       │
+│     从渲染后的 DOM 提取 detail_url 和列表字段              │
+│     list_item.custom_fields 存储列表页自定义字段            │
 └──────────────────────────┬─────────────────────────────────┘
                            ▼
 ┌────────────────────────────────────────────────────────────┐
-│  4. 爬取详情页 → 存入 article (status=CRAWLED/FAILED)    │
-│     custom_fields 存储用户自定义字段                        │
-│     更新 list_page.status                                  │
+│  4. 遍历 list_item → 检查停止 flag                        │
+│     从 list_item.detail_url 提取详情页 URL                 │
+│     后端 Playwright 爬取详情页 → 存入 article               │
+│     article.custom_fields 存储详情页自定义字段             │
+│     更新 list_item.status                                  │
 └──────────────────────────┬─────────────────────────────────┘
                            ▼
 ┌────────────────────────────────────────────────────────────┐
@@ -617,13 +695,23 @@ public class DetailUrl {
 
 - `extractByCss(html, selector)` - CSS 选择器提取
 - `extractByXPath(html, selector)` - XPath 选择器提取
-- `convertSelector(html, element)` - 从元素生成选择器（Playwright 调用）
+- `convertSelector(elementInfo)` - 从 Playwright 返回的元素信息生成选择器
 
-#### PlaywrightSelectorGenerator.java
+#### BrowserSessionService.java (后端 Playwright 控制)
 
-- `generateSelector(url, element)` - 在浏览器中点击元素，生成选择器
-- `openBrowser(url)` - 打开内嵌浏览器
-- `closeBrowser()` - 关闭浏览器
+- MVP 单用户单会话：服务内只维护一个当前 Playwright 浏览器会话
+- Playwright 由本地 Spring Boot 进程直接启动和关闭
+- `openPage(url)` - 打开浏览器页面，加载URL并等待JS渲染
+- `clickElement(selector)` - 点击页面元素，用于选择器生成
+- `generateSelector(elementHandle)` - 从被点击元素生成 CSS/XPath 选择器
+- `extractFields(selector)` - 使用选择器从当前渲染后的DOM提取字段值
+- `closePage()` - 关闭当前页面
+- `closeBrowser()` - 关闭浏览器会话
+
+#### BrowserWebSocketHandler.java
+
+- `sendFrame()` - 向前端推送当前浏览器截图帧
+- `sendStatus()` - 向前端推送页面加载状态、错误信息和会话状态
 
 ---
 
@@ -638,11 +726,13 @@ frontend/
 │   │   ├── config.js
 │   │   ├── field.js
 │   │   ├── task.js
-│   │   └── article.js
+│   │   ├── article.js
+│   │   ├── browser.js           # 浏览器会话 REST API
+│   │   └── browserSocket.js     # 浏览器画面 WebSocket
 │   ├── components/
-│   │   ├── BrowserEmbed.vue      # 内嵌浏览器组件
-│   │   ├── FieldEditor.vue       # 字段编辑器
-│   │   └── JsonTable.vue         # JSON展开表格
+│   │   ├── BrowserControl.vue   # 浏览器控制组件（通过后端API控制）
+│   │   ├── FieldEditor.vue      # 字段编辑器
+│   │   └── JsonTable.vue        # JSON展开表格
 │   ├── pages/
 │   │   ├── ConfigList.vue
 │   │   ├── ConfigEdit.vue
@@ -667,16 +757,21 @@ backend/
 │   │   ├── ConfigController.java
 │   │   ├── FieldController.java
 │   │   ├── TaskController.java
-│   │   └── ArticleController.java
+│   │   ├── ArticleController.java
+│   │   └── BrowserController.java  # 浏览器会话 API
+│   ├── websocket/
+│   │   └── BrowserWebSocketHandler.java  # 浏览器画面和状态推送
 │   ├── service/
 │   │   ├── CrawlService.java
 │   │   ├── SelectorService.java
-│   │   └── FieldService.java
+│   │   ├── FieldService.java
+│   │   └── BrowserSessionService.java  # Playwright 控制
 │   ├── repository/
 │   ├── entity/
 │   │   ├── CrawlConfig.java
 │   │   ├── CrawlField.java
 │   │   ├── ListPage.java
+│   │   ├── ListItem.java
 │   │   ├── Article.java
 │   │   ├── CrawlTask.java
 │   │   └── DetailUrl.java
@@ -699,7 +794,8 @@ backend/
 
 - [ ] 创建爬虫配置（名称、URL、页面类型）
 - [ ] 选择器类型切换（CSS / XPath）
-- [ ] 内嵌浏览器打开目标网页
+- [ ] 后端 Playwright 浏览器会话打开目标网页
+- [ ] WebSocket 实时展示浏览器截图帧和页面状态
 - [ ] 点击页面元素自动生成选择器
 - [ ] 手动输入/修改选择器
 - [ ] 列表页字段配置（添加/编辑/删除字段）
@@ -737,20 +833,47 @@ backend/
 ## 10. 验收标准
 
 1. ✅ 能够创建通用爬虫配置（不限网站）
-2. ✅ 内嵌浏览器 + 点击生成选择器
+2. ✅ 后端 Playwright 浏览器 + 点击生成选择器
 3. ✅ 用户自定义字段（名称 + 类型 + 选择器）
 4. ✅ 列表页字段 / 详情页字段分开管理
-5. ✅ 支持 LIST_DETAIL 模式（列表→详情）
+5. ✅ 支持 LIST_DETAIL 模式（列表→多个列表项→详情）
 6. ✅ 支持 DETAIL_ONLY 模式（URL列表→直接详情）
 7. ✅ custom_fields 以 JSON 格式存储
 8. ✅ 能够启动爬取任务，实时查看进度
 9. ✅ 能够停止正在运行的爬取任务
 10. ✅ 前端动态展示 custom_fields 字段
 11. ✅ 任务可中断，优雅退出
+12. ✅ 支持动态页面（JS渲染）通过后端 Playwright 浏览器会话
+13. ✅ CSS 和 XPath 选择器双重支持
 
 ---
 
-## 11. 后续迭代方向
+## 11. MVP 边界
+
+**MVP 包含**：
+- 列表页 + 详情页模式（LIST_DETAIL）
+- 直接详情页模式（DETAIL_ONLY）
+- 后端 Playwright 控制的真实浏览器会话
+- 单用户单 Playwright 浏览器会话
+- 本地 Spring Boot 进程直接启动 Playwright
+- WebSocket 推送浏览器截图帧和状态
+- JS渲染页面的爬取
+- 点击生成 CSS/XPath 选择器
+- 用户自定义字段（名称 + 类型 + 选择器）
+- raw_html 回溯重新解析
+
+**MVP 不包含（后续迭代）**：
+| 功能 | 移至迭代 |
+|------|----------|
+| 登录/Cookie/Header 配置 | 后续迭代 |
+| 反爬策略（User-Agent、请求延迟、代理IP） | 后续迭代 |
+| 选择器模板 | 后续迭代 |
+| 定时爬取 | 后续迭代 |
+| 增量爬取 | 后续迭代 |
+
+---
+
+## 12. 后续迭代方向
 
 | 功能 | 说明 |
 |------|------|
@@ -758,3 +881,4 @@ backend/
 | 定时爬取 | 周期性自动执行爬取任务 |
 | 增量爬取 | 仅爬取新数据，避免重复 |
 | 反爬策略 | 随机 User-Agent、请求延迟、代理IP |
+| 登录/Cookie/Header | 支持需要认证的页面 |

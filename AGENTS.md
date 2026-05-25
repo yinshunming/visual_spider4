@@ -1,6 +1,6 @@
 # AGENTS.md - 可视化爬虫 MVP
 
-**项目**: visual_spider4 | **阶段**: 初始化中 | **技术栈**: Vue3/Vite/Element Plus/Pinia + Spring Boot 3.x/JPA + PostgreSQL
+**项目**: visual_spider4 | **阶段**: 初始化中 | **技术栈**: Vue3/Vite/Element Plus/Pinia + Spring Boot 3.x/JPA + PostgreSQL + Playwright + WebSocket
 
 ---
 
@@ -11,7 +11,7 @@
 **当前状态**：
 - `frontend/` - 尚未创建
 - `backend/` - 尚未创建
-- 数据库表结构 - 待设计
+- 数据库表结构 - 设计文档已明确，代码尚未实现
 
 ---
 
@@ -23,6 +23,7 @@
 | UI 库 | Element Plus | 组件库 |
 | 状态管理 | Pinia | Store 划分见下方 |
 | HTTP | Axios | 统一封装，baseURL `/api/v1` |
+| 实时通道 | WebSocket | 接收后端推送的浏览器截图帧、加载状态和错误信息 |
 
 **Pinia Store 划分**：
 | Store | 职责 |
@@ -47,8 +48,10 @@
 |------|------|------|
 | 框架 | Spring Boot 3.x | JPA + Spring Data |
 | 数据库 | PostgreSQL | 关系型数据库 |
-| HTTP 客户端 | Spring WebClient | 异步非阻塞 |
-| HTML 解析 | Jsoup | 支持 CSS + XPath |
+| 动态页面引擎 | Playwright | 本地 Spring Boot 进程直接启动真实浏览器，等待 JS 渲染，支持 CSS/XPath |
+| 静态 HTML 解析 | Jsoup | 仅用于 raw_html 重新解析或简单静态页面 |
+| 实时通道 | WebSocket | 推送浏览器截图帧、加载状态和错误信息 |
+| HTTP 客户端 | Spring WebClient | 辅助静态请求，不作为动态页面主爬取路径 |
 
 **分层架构**：
 ```
@@ -59,6 +62,7 @@ Controller -> Service -> Repository -> Entity
 ```
 com.visualspider
 ├── controller/    # REST API
+├── websocket/     # 浏览器画面和状态 WebSocket 推送
 ├── service/      # 业务逻辑
 ├── repository/   # JPA Repository
 ├── entity/       # JPA Entity
@@ -88,13 +92,17 @@ com.visualspider
 | 表名 | 说明 |
 |------|------|
 | `crawl_config` | 爬虫配置 |
+| `crawl_field` | 字段配置 |
 | `list_page` | 列表页数据（保留 raw_html 支持回溯） |
+| `list_item` | 列表项数据（detail_url + 列表页字段） |
 | `article` | 文章详情 |
 | `crawl_task` | 爬取任务 |
+| `detail_url` | DETAIL_ONLY 模式下的直接详情页 URL |
 
 **设计原则**：
 - `list_page` 单独存储，保留 `raw_html` 原始数据，出问题可重新解析
-- `article` 通过 `list_page_id` 回溯来源
+- `list_item` 存储列表中的每条记录，包含 `detail_url` 和列表页自定义字段
+- `article` 通过 `list_item_id` 回溯列表项来源；DETAIL_ONLY 模式下 `list_item_id` 为空
 - `status` 统一 `VARCHAR(20)`
 - `created_at/updated_at` 使用 `TIMESTAMP`
 - HTML 字段使用 `TEXT`
@@ -113,6 +121,9 @@ com.visualspider
 | 爬取任务 | `/tasks` | 创建/启动/停止/删除 |
 | 文章数据 | `/articles` | 分页查询 + 导出 |
 | 列表页数据 | `/list-pages` | 回溯重新解析 |
+| 列表项数据 | `/list-items` | 分页查询列表项 |
+| 浏览器会话 | `/browser/open`, `/browser/click`, `/browser/extract`, `/browser/close` | 后端 Playwright 控制动作 |
+| 浏览器实时通道 | `/ws/browser` | WebSocket 推送浏览器截图帧和状态 |
 
 ---
 
@@ -120,10 +131,15 @@ com.visualspider
 
 | 组件 | 技术 | 说明 |
 |------|------|------|
-| HTTP 客户端 | Spring WebClient | 异步非阻塞 |
-| HTML 解析 | Jsoup | CSS + XPath 选择器 |
+| 动态页面引擎 | Playwright | 主爬取路径；后端本地启动真实浏览器并等待 JS 渲染 |
+| 选择器 | CSS + XPath | MVP 同时支持 |
+| 浏览器画面 | WebSocket | 推送截图帧、页面加载状态和错误信息 |
+| 静态 HTML 解析 | Jsoup | raw_html 重新解析或简单静态页面辅助 |
+| HTTP 客户端 | Spring WebClient | 静态请求辅助，不替代 Playwright 动态页面能力 |
 | 线程控制 | ThreadPoolExecutor | 并发控制 |
 | 优雅停止 | AtomicBoolean | 捕获中断信号，逐步退出 |
+
+**浏览器会话约束**：MVP 为单用户单 Playwright 浏览器会话；重复打开页面时复用当前会话或先关闭旧会话。
 
 ---
 
