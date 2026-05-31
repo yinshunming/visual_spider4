@@ -6,12 +6,13 @@
 
 ## 1. 项目阶段说明
 
-项目正在初始化，代码尚未实现。设计文档位于 `docs/superpowers/specs/2026-05-24-nba-spider-design.md`，作为开发参考。
+项目已完成 OpenSpec specs bootstrap，8 个 capability specs 已同步到 `openspec/specs/` 作为开发真相源。原始设计文档归档于 `openspec/changes/archive/2026-05-26-bootstrap-visual-crawler-specs/`。
 
 **当前状态**：
-- `frontend/` - 尚未创建
-- `backend/` - 尚未创建
-- 数据库表结构 - 设计文档已明确，代码尚未实现
+- `frontend/` - ✅ 已创建（基础工程：Vue 3 + Vite + Element Plus）
+- `backend/` - ✅ 已创建（基础工程：Spring Boot 3.2.5 + 健康检查端点）
+- OpenSpec specs — ✅ 已同步（8 个 capabilities）
+- 数据库表结构 — ✅ 数据库 `visual_spider4` 已创建，schema 待实现
 
 ---
 
@@ -58,7 +59,7 @@
 Controller -> Service -> Repository -> Entity
 ```
 
-**包结构**（待创建）：
+**包结构**：
 ```
 com.visualspider
 ├── controller/    # REST API
@@ -145,23 +146,21 @@ com.visualspider
 
 ## 7. 开发命令
 
-### 前端（待创建）
+### 前端
 ```bash
 cd frontend
-pnpm install
-pnpm dev      # 开发服务器
-pnpm build    # 构建
-pnpm lint     # lint 检查
-pnpm test     # 单元测试
+npm install
+npm run dev      # 开发服务器
+npm run build    # 构建
+npm run preview  # 预览构建
 ```
 
-### 后端（待创建）
+### 后端
 ```bash
 cd backend
 mvn clean compile   # 编译
 mvn test           # 测试
-mvn test jacoco:report  # 覆盖率
-mvn verify         # 完整验证
+mvn spring-boot:run # 启动应用
 ```
 
 ### 验证顺序
@@ -348,6 +347,19 @@ mvn verify
 
 ---
 
-## 11. 参考文档
+## 11. OpenSpec Specs 真相源
 
-- 设计文档：`docs/superpowers/specs/2026-05-24-nba-spider-design.md`
+所有开发需求、评审和实现追踪以 `openspec/specs/` 下的 specs 为准：
+
+| Capability | 说明 |
+|-----------|------|
+| `project-management` | 项目配置生命周期、页面类型模式、状态 |
+| `page-visual-selection` | 浏览器会话、截图流、点击生成选择器 |
+| `selector-rule-management` | 字段定义、选择器类型约束、detail_url 必填 |
+| `extraction-template` | 抽取模板、DOM提取、多值、类型校验、重解析 |
+| `crawl-execution` | 任务生命周期、爬取流程、优雅停止 |
+| `extraction-preview-validation` | 实时预览、字段提取、部分成功 |
+| `data-persistence` | raw_html保留、custom_fields JSON、查询导出 |
+| `system-boundaries` | MVP约束（单会话/单用户/无认证/无反爬）|
+
+归档记录：`openspec/changes/archive/2026-05-26-bootstrap-visual-crawler-specs/`
