@@ -1,10 +1,21 @@
 # Visual Spider - 可视化爬虫管理系统
 
+## 当前进度
+
+| 里程碑 | 状态 |
+|--------|------|
+| M0 开发环境 | ✅ 完成 |
+| M1 项目管理 | ✅ 完成 — 37 测试通过 |
+| M2+ 选择器/抽取/爬取 | ⬜ 未开始 |
+
+详见 [AGENTS.md](AGENTS.md) §3 与 [openspec/specs/](openspec/specs/)。
+
 ## 技术栈
 
 ### 后端
 - **框架**: Spring Boot 3.2.5
 - **语言**: Java 21
+- **ORM**: Spring Data JPA
 - **数据库**: PostgreSQL 16
 - **构建工具**: Maven
 
@@ -13,7 +24,9 @@
 - **构建工具**: Vite 5
 - **UI 组件**: Element Plus
 - **状态管理**: Pinia
+- **路由**: vue-router
 - **HTTP 客户端**: Axios
+- **测试**: vitest + @vue/test-utils（已配置，本里程碑未写测试）
 
 ## 本地开发环境搭建
 
@@ -34,6 +47,8 @@ docker compose up -d
 docker ps
 ```
 
+> 也可以直接复用已运行的 `postgresql` 容器（项目开发约定）。
+
 ### 2. 启动后端
 
 ```bash
@@ -41,23 +56,19 @@ cd backend
 mvn spring-boot:run
 ```
 
-后端启动成功后，访问健康检查接口：
-```
-http://localhost:8080/api/v1/health
-```
+后端启动成功后：
+- 健康检查：`http://localhost:8080/api/v1/health`
+- 配置管理 API：`http://localhost:8080/api/v1/configs`
 
 ### 3. 启动前端
 
 ```bash
 cd frontend
-npm install  # 首次运行需要安装依赖
+npm install  # 首次运行
 npm run dev
 ```
 
-前端启动成功后，访问：
-```
-http://localhost:5173
-```
+前端启动成功后访问：`http://localhost:5173`（已配 Vite 代理 `/api` → `http://localhost:8080`）
 
 ## 环境变量
 
@@ -84,53 +95,73 @@ http://localhost:5173
 ```
 visual_spider4/
 ├── backend/                 # Spring Boot 后端项目
-│   ├── src/
-│   │   ├── main/java/com/visualspider/
-│   │   │   ├── controller/  # REST API 控制器
-│   │   │   ├── service/     # 业务逻辑
-│   │   │   ├── repository/  # 数据访问层
-│   │   │   ├── entity/      # JPA 实体
-│   │   │   ├── dto/         # 数据传输对象
-│   │   │   └── exception/   # 异常处理
-│   │   └── test/            # 单元测试
+│   ├── src/main/java/com/visualspider/
+│   │   ├── Application.java
+│   │   ├── controller/      # REST 控制器（Config/Field/Health）
+│   │   ├── service/         # 业务层
+│   │   ├── repository/      # JPA 仓库
+│   │   ├── entity/          # JPA 实体
+│   │   ├── dto/             # 请求/响应 DTO
+│   │   ├── enums/           # PageType / SelectorType / FieldType / ConfigStatus / FieldPageType
+│   │   └── exception/       # 异常处理
+│   ├── src/test/            # 37 个测试（Repository/Service/Controller）
 │   └── pom.xml
 ├── frontend/                # Vue 3 前端项目
 │   ├── src/
-│   │   ├── api/            # API 封装
-│   │   ├── stores/         # Pinia 状态管理
-│   │   ├── views/          # 页面组件
-│   │   ├── App.vue         # 根组件
-│   │   └── main.js         # 入口文件
-│   ├── index.html
-│   ├── package.json
-│   └── vite.config.js
+│   │   ├── api/             # config.js（Axios 封装）
+│   │   ├── stores/          # configStore.js（Pinia）
+│   │   ├── views/           # ConfigList.vue / ConfigEdit.vue
+│   │   ├── router/          # vue-router 配置
+│   │   ├── App.vue
+│   │   └── main.js
+│   ├── vite.config.js
+│   └── package.json
+├── openspec/                # OpenSpec 规格
+│   ├── specs/               # 9 个 capability 真相源
+│   └── changes/             # 进行中的 change 与归档
+├── docs/                    # 深入文档
+│   ├── architecture.md      # 架构
+│   ├── api-guide.md         # API 参考
+│   ├── runbook.md            # 运维
+│   ├── tdd-guide.md          # TDD 模板
+│   └── explore/              # 历史设计探索
 ├── docker-compose.yml       # PostgreSQL 容器配置
+├── AGENTS.md                # 项目规则（AI 必读）
 └── README.md
 ```
 
-## API 统一响应格式
+## API 速查
 
-### 成功响应
+所有 API 统一响应包络：
+
 ```json
-{
-  "code": 200,
-  "data": { ... },
-  "message": "success"
-}
+// 成功
+{ "code": 200, "data": {...}, "message": "success" }
+
+// 错误（HTTP 状态码仍是 200）
+{ "code": 404, "data": null, "message": "CrawlConfig not found: id=99" }
 ```
 
-### 错误响应
-```json
-{
-  "code": 400,
-  "data": null,
-  "message": "错误描述"
-}
-```
+### 配置（M1 已实现）
 
-## 健康检查
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/v1/configs` | 分页查询（参数 `page`、`size`） |
+| POST | `/api/v1/configs` | 创建配置（status 默认 STOPPED） |
+| GET | `/api/v1/configs/{id}` | 获取详情（带字段） |
+| PUT | `/api/v1/configs/{id}` | 更新配置（`fields[]` 全量替换） |
+| DELETE | `/api/v1/configs/{id}` | 删除配置（级联删除字段） |
 
-### 后端健康检查
+### 字段（子资源，M1 已实现）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/v1/configs/{configId}/fields` | 列出字段 |
+| POST | `/api/v1/configs/{configId}/fields` | 添加字段 |
+| PUT | `/api/v1/fields/{id}` | 更新字段 |
+| DELETE | `/api/v1/fields/{id}` | 删除字段 |
+
+### 健康检查
 
 ```
 GET /api/v1/health
@@ -140,40 +171,38 @@ GET /api/v1/health
 ```json
 {
   "code": 200,
-  "data": {
-    "status": "UP",
-    "database": "UP",
-    "timestamp": "2024-01-01T00:00:00Z"
-  },
+  "data": { "status": "UP", "database": "UP", "timestamp": "2026-06-01T00:00:00Z" },
   "message": "success"
 }
 ```
+
+详细 API 文档（请求/响应示例、错误码）：[docs/api-guide.md](docs/api-guide.md)。
 
 ## 常用命令
 
 ### 后端
 ```bash
-# 编译
-mvn clean compile
-
-# 运行测试
-mvn test
-
-# 启动应用
-mvn spring-boot:run
+cd backend
+mvn clean compile        # 编译
+mvn test                 # 跑所有测试（37 项）
+mvn spring-boot:run      # 启动
 ```
 
 ### 前端
 ```bash
-# 安装依赖
-npm install
-
-# 开发模式
-npm run dev
-
-# 构建生产版本
-npm run build
-
-# 预览构建结果
-npm run preview
+cd frontend
+npm install              # 首次安装
+npm run dev              # 开发服务器
+npm run build            # 生产构建
+npm run preview          # 预览构建
+npm test                 # 跑 vitest（需补写测试）
 ```
+
+## 深入阅读
+
+- [AGENTS.md](AGENTS.md) — 项目红线与约定
+- [docs/architecture.md](docs/architecture.md) — 架构与数据流
+- [docs/api-guide.md](docs/api-guide.md) — 完整 API 参考
+- [docs/runbook.md](docs/runbook.md) — 启动/测试/故障排查
+- [docs/tdd-guide.md](docs/tdd-guide.md) — TDD 模板与反模式
+- [openspec/specs/](openspec/specs/) — 9 个 capability 真相源

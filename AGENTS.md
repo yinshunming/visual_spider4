@@ -1,365 +1,183 @@
 # AGENTS.md - 可视化爬虫 MVP
 
-**项目**: visual_spider4 | **阶段**: 初始化中 | **技术栈**: Vue3/Vite/Element Plus/Pinia + Spring Boot 3.x/JPA + PostgreSQL + Playwright + WebSocket
+**项目**: visual_spider4
+**当前里程碑**: M1（项目管理）已完成；M2+ 待规划
+**技术栈**: Vue3 / Vite / Element Plus / Pinia / vue-router + Spring Boot 3.2.5 / JPA / PostgreSQL 16 / Maven / Java 21
 
 ---
 
-## 1. 项目阶段说明
+## 0. 必读红线（先看这里）
 
-项目已完成 OpenSpec specs bootstrap，8 个 capability specs 已同步到 `openspec/specs/` 作为开发真相源。原始设计文档归档于 `openspec/changes/archive/2026-05-26-bootstrap-visual-crawler-specs/`。
+- **包名** `com.visualspider`，所有 Java 类必须放此包下
+- **统一响应** `ApiResponse<T>{code, data, message}` 包络所有 controller 返回，错误也用同一包络
+- **删除走 `service.delete(entity)`，不是 `repository.deleteById(id)`** — 后者跳过 JPA cascade，导致外键违反
+- **JPA 双向上**：`CrawlConfig` 的 `fields` 集合和 `CrawlField.config` 引用必须同时维护，单边修改 cascade 不触发
+- **测试用本地 PG**，不是 Testcontainers — 见 [docs/runbook.md](docs/runbook.md) 的 Known Issues
+- **不写实现后再补测试**，写测试 → 失败 → 写实现 → 通过（RED→GREEN）
 
-**当前状态**：
-- `frontend/` - ✅ 已创建（基础工程：Vue 3 + Vite + Element Plus）
-- `backend/` - ✅ 已创建（基础工程：Spring Boot 3.2.5 + 健康检查端点）
-- OpenSpec specs — ✅ 已同步（8 个 capabilities）
-- 数据库表结构 — ✅ 数据库 `visual_spider4` 已创建，schema 待实现
+## 1. 仓库结构
 
----
-
-## 2. 前端技术栈
-
-| 分层 | 技术 | 说明 |
-|------|------|------|
-| 框架 | Vue 3 + Vite | 使用 `<script setup>` 语法 |
-| UI 库 | Element Plus | 组件库 |
-| 状态管理 | Pinia | Store 划分见下方 |
-| HTTP | Axios | 统一封装，baseURL `/api/v1` |
-| 实时通道 | WebSocket | 接收后端推送的浏览器截图帧、加载状态和错误信息 |
-
-**Pinia Store 划分**：
-| Store | 职责 |
-|-------|------|
-| `useConfigStore` | 爬虫配置 CRUD |
-| `useTaskStore` | 任务管理 |
-| `useArticleStore` | 文章数据 |
-
-**页面路由**（待实现）：
-| 路径 | 页面 |
-|------|------|
-| `/configs` | 配置管理列表 |
-| `/configs/:id` | 配置编辑 |
-| `/tasks` | 任务管理 |
-| `/articles` | 数据展示 |
-
----
-
-## 3. 后端技术栈
-
-| 分层 | 技术 | 说明 |
-|------|------|------|
-| 框架 | Spring Boot 3.x | JPA + Spring Data |
-| 数据库 | PostgreSQL | 关系型数据库 |
-| 动态页面引擎 | Playwright | 本地 Spring Boot 进程直接启动真实浏览器，等待 JS 渲染，支持 CSS/XPath |
-| 静态 HTML 解析 | Jsoup | 仅用于 raw_html 重新解析或简单静态页面 |
-| 实时通道 | WebSocket | 推送浏览器截图帧、加载状态和错误信息 |
-| HTTP 客户端 | Spring WebClient | 辅助静态请求，不作为动态页面主爬取路径 |
-
-**分层架构**：
 ```
-Controller -> Service -> Repository -> Entity
+visual_spider4/
+├── backend/                          # Spring Boot 3.2.5 + JPA + Java 21
+│   ├── src/main/java/com/visualspider/
+│   │   ├── Application.java
+│   │   ├── controller/               # REST 控制器（Config/Field/Health）
+│   │   ├── service/                  # 业务层（CrawlConfigService / CrawlFieldService）
+│   │   ├── repository/               # JPA 仓库
+│   │   ├── entity/                   # JPA 实体（CrawlConfig, CrawlField）
+│   │   ├── dto/
+│   │   │   ├── request/              # CreateConfigRequest / CreateFieldRequest / UpdateConfigRequest
+│   │   │   └── response/             # ConfigResponse / FieldResponse
+│   │   ├── enums/                    # PageType / SelectorType / FieldType / ConfigStatus / FieldPageType
+│   │   └── exception/                # BusinessException / GlobalExceptionHandler / ConfigNotFoundException
+│   ├── src/test/                     # 37 个测试（Repository/Service/Controller）
+│   ├── src/main/resources/application.yml
+│   ├── src/test/resources/application-test.yml
+│   └── pom.xml
+├── frontend/                         # Vue 3 + Vite + Element Plus + Pinia
+│   └── src/
+│       ├── api/                      # config.js（Axios 封装）
+│       ├── stores/                   # configStore.js（Pinia）
+│       ├── views/                    # ConfigList.vue / ConfigEdit.vue
+│       ├── router/index.js
+│       ├── App.vue / main.js
+│       └── vitest.config.js
+├── openspec/
+│   ├── specs/                        # 9 个能力真相源（开发依据）
+│   └── changes/
+│       ├── m1-project-management/    # 当前活跃 change（4/4 artifacts 完成）
+│       └── archive/                  # 已归档
+├── docs/                             # 深入文档（架构、API、运维、TDD）
+├── docker-compose.yml                # PostgreSQL
+├── AGENTS.md                         # 本文件
+└── README.md                         # 入门与运行
 ```
 
-**包结构**：
-```
-com.visualspider
-├── controller/    # REST API
-├── websocket/     # 浏览器画面和状态 WebSocket 推送
-├── service/      # 业务逻辑
-├── repository/   # JPA Repository
-├── entity/       # JPA Entity
-├── dto/          # Data Transfer Object
-└── exception/    # 统一异常处理
-```
+## 2. 开发命令速查
 
-**统一响应格式**：
-```json
-// 成功
-{ "code": 200, "data": {...}, "message": "success" }
-
-// 错误
-{ "code": 400, "data": null, "message": "错误描述" }
-```
-
-**异常处理**：
-- 使用 `@ControllerAdvice` 全局处理
-- 自定义异常：`BusinessException`
-- HTTP 状态码：200 成功 / 400 参数错误 / 500 系统错误
-
----
-
-## 4. 数据库设计原则
-
-**核心表**（待创建）：
-| 表名 | 说明 |
-|------|------|
-| `crawl_config` | 爬虫配置 |
-| `crawl_field` | 字段配置 |
-| `list_page` | 列表页数据（保留 raw_html 支持回溯） |
-| `list_item` | 列表项数据（detail_url + 列表页字段） |
-| `article` | 文章详情 |
-| `crawl_task` | 爬取任务 |
-| `detail_url` | DETAIL_ONLY 模式下的直接详情页 URL |
-
-**设计原则**：
-- `list_page` 单独存储，保留 `raw_html` 原始数据，出问题可重新解析
-- `list_item` 存储列表中的每条记录，包含 `detail_url` 和列表页自定义字段
-- `article` 通过 `list_item_id` 回溯列表项来源；DETAIL_ONLY 模式下 `list_item_id` 为空
-- `status` 统一 `VARCHAR(20)`
-- `created_at/updated_at` 使用 `TIMESTAMP`
-- HTML 字段使用 `TEXT`
-
----
-
-## 5. API 设计原则
-
-**基础路径**: `/api/v1`
-
-**核心端点**（待实现）：
-
-| 资源 | 端点 | 说明 |
-|------|------|------|
-| 爬虫配置 | `/configs` | CRUD + 测试 |
-| 爬取任务 | `/tasks` | 创建/启动/停止/删除 |
-| 文章数据 | `/articles` | 分页查询 + 导出 |
-| 列表页数据 | `/list-pages` | 回溯重新解析 |
-| 列表项数据 | `/list-items` | 分页查询列表项 |
-| 浏览器会话 | `/browser/open`, `/browser/click`, `/browser/extract`, `/browser/close` | 后端 Playwright 控制动作 |
-| 浏览器实时通道 | `/ws/browser` | WebSocket 推送浏览器截图帧和状态 |
-
----
-
-## 6. 爬虫引擎要点
-
-| 组件 | 技术 | 说明 |
-|------|------|------|
-| 动态页面引擎 | Playwright | 主爬取路径；后端本地启动真实浏览器并等待 JS 渲染 |
-| 选择器 | CSS + XPath | MVP 同时支持 |
-| 浏览器画面 | WebSocket | 推送截图帧、页面加载状态和错误信息 |
-| 静态 HTML 解析 | Jsoup | raw_html 重新解析或简单静态页面辅助 |
-| HTTP 客户端 | Spring WebClient | 静态请求辅助，不替代 Playwright 动态页面能力 |
-| 线程控制 | ThreadPoolExecutor | 并发控制 |
-| 优雅停止 | AtomicBoolean | 捕获中断信号，逐步退出 |
-
-**浏览器会话约束**：MVP 为单用户单 Playwright 浏览器会话；重复打开页面时复用当前会话或先关闭旧会话。
-
----
-
-## 7. 开发命令
-
-### 前端
 ```bash
+# 后端
+cd backend
+mvn test                              # 跑所有测试（37 项）
+mvn spring-boot:run                   # 启动服务（端口 8080）
+
+# 前端
 cd frontend
 npm install
-npm run dev      # 开发服务器
-npm run build    # 构建
-npm run preview  # 预览构建
+npm run dev                           # 启动 Vite（端口 5173，已配代理 /api -> 8080）
+npm run build                         # 生产构建
+npm test                              # vitest（前端测试，本里程碑未写）
+
+# 数据库
+docker compose up -d                  # 启动 PostgreSQL（用户手工启动的 postgresql 容器亦可）
 ```
 
-### 后端
-```bash
-cd backend
-mvn clean compile   # 编译
-mvn test           # 测试
-mvn spring-boot:run # 启动应用
+**环境变量**（后端）：`DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USERNAME` / `DB_PASSWORD`，均有默认值，详见 `application.yml`。
+
+## 3. 当前里程碑状态
+
+| Capability | Spec | 实现 | 状态 |
+|-----------|------|------|------|
+| `project-management` | ✅ | ✅ | M1 完成 — 37 测试通过 |
+| `page-visual-selection` | ✅ | ⬜ | 未开始 |
+| `selector-rule-management` | ✅ | ⬜ | 未开始 |
+| `extraction-template` | ✅ | ⬜ | 未开始 |
+| `extraction-preview-validation` | ✅ | ⬜ | 未开始 |
+| `crawl-execution` | ✅ | ⬜ | 未开始 |
+| `data-persistence` | ✅ | ⬜ | 未开始 |
+| `system-boundaries` | ✅ | ⬜ | 未开始 |
+| `dev-environment` | ✅ | ✅ | M0 完成 |
+
+**M1 范围**：配置 CRUD + 字段 CRUD（作为配置子资源）+ 全量更新字段替换 + 前端列表/编辑页。
+
+## 4. 路由速查
+
+```
+后端 REST API（全部 /api/v1 前缀）：
+
+GET    /configs                  分页查询配置
+POST   /configs                  创建配置（status 默认 STOPPED）
+GET    /configs/{id}             获取配置详情（带字段）
+PUT    /configs/{id}             更新配置（fields[] 全量替换）
+DELETE /configs/{id}             删除配置（级联删除字段）
+
+GET    /configs/{id}/fields      获取配置的所有字段
+POST   /configs/{id}/fields      添加字段
+PUT    /fields/{id}              更新字段
+DELETE /fields/{id}              删除字段
+
+GET    /health                   健康检查
+
+前端路由：
+/                            -> /configs 重定向
+/configs                     ConfigList（列表 + 新建/编辑/删除）
+/configs/new                 ConfigEdit 新建模式
+/configs/{id}                ConfigEdit 编辑模式
 ```
 
-### 验证顺序
-```bash
-lint -> typecheck -> test -> build
+详细 API 文档见 [docs/api-guide.md](docs/api-guide.md)。
+
+## 5. 数据模型
+
+```
+crawl_config
+  id, name, page_type (LIST_DETAIL|DETAIL_ONLY),
+  selector_type (CSS|XPATH), status (ACTIVE|STOPPED, default STOPPED),
+  created_at, updated_at
+
+crawl_field（作为 crawl_config 的子资源，FK config_id）
+  id, config_id, page_type (LIST|DETAIL), field_name, field_type (TEXT|NUMBER|DATE|URL),
+  selector, created_at, updated_at
+
+关系：CrawlConfig @OneToMany CrawlField，CascadeType.ALL + orphanRemoval=true
+删除配置时自动级联删除所有字段。
 ```
 
----
-
-## 8. Git 规范
-
-**分支命名**：
-```
-feature/{功能名}
-fix/{问题描述}
-refactor/{重构内容}
-```
-
-**Commit Message**：
-```
-{type}: {简短描述}
-
-type: feat | fix | refactor | test | docs | chore
-```
-
----
-
-## 9. 代码风格
+## 6. 代码风格（核心约定）
 
 **Java**：
-- 类名：PascalCase（如 `CrawlConfigController`）
-- 方法名/变量名：camelCase
-- 表名/字段名：snake_case
+- 类名 `PascalCase`、方法/变量 `camelCase`、常量 `SCREAMING_SNAKE_CASE`
+- 优先用 `record` 做 DTO 和值对象
+- 构造函数注入，不用 `@Autowired` 字段注入
+- 所有 DTO 字段用 `@NotNull` / `@NotBlank` 校验
 
-**JavaScript/Vue**：
-- 组件文件：PascalCase（如 `ConfigList.vue`）
-- 使用 Vue3 `<script setup>` 语法
-- Props 使用 `defineProps`，响应式使用 `ref/reactive`
+**Vue/JS**：
+- `<script setup>` 语法，props 用 `defineProps`
+- 状态管理走 Pinia（按 useXxxStore 命名）
+- 组件文件 `PascalCase.vue`，其他 JS/TS 文件 `camelCase.js`
 
----
+完整规范和反模式见 `~/.claude/rules/java/` 与 `~/.claude/rules/typescript/`。
 
-## 10. TDD 开发模式
+## 7. TDD 模式（必读）
 
-**核心原则**：测试通过公共接口验证行为，不验证实现细节。代码可以完全重构，测试不应随之失效。
-
-### 10.1 工作流程
-
+**每个新行为走三步循环**：
 ```
-RED:   写一个测试 → 测试失败
-GREEN: 写最小代码通过测试 → 测试通过
-REFACTOR: 重构 → 测试保持绿色
+RED:    写一个失败测试（公共接口视角）
+GREEN:  写最小实现让测试通过
+REFACTOR: 重构保持绿色
 ```
 
-**垂直切片方式**（正确）：
-```
-RED→GREEN: test1 → impl1
-RED→GREEN: test2 → impl2
-RED→GREEN: test3 → impl3
-...
-```
+**禁止**：
+- 写完所有测试再写所有实现（水平切片）
+- 测私有方法 / mock 内部协作者
+- 写完代码后补测试（事后测试 ≠ TDD）
 
-**禁止水平切片**（错误）：
-```
-RED:   一次写完所有测试
-GREEN: 一次写完所有实现
-```
+详细模板、覆盖率目标、断言风格见 [docs/tdd-guide.md](docs/tdd-guide.md)。
 
-### 10.2 测试分层
+## 8. 深入文档指针
 
-| 层级 | 工具 | 说明 |
-|------|------|------|
-| 单元测试 | JUnit 5 + Mockito | Service 业务逻辑 |
-| Web 层测试 | MockMvc | Controller 接口 |
-| 集成测试 | SpringBootTest | 端到端验证 |
-| 持久层测试 | DataJpaTest | Repository |
+| 主题 | 文件 |
+|------|------|
+| 后端 + 前端架构、数据流 | [docs/architecture.md](docs/architecture.md) |
+| API 端点、请求/响应示例、错误码 | [docs/api-guide.md](docs/api-guide.md) |
+| 启动 / 测试 / 故障排查 / Known Issues | [docs/runbook.md](docs/runbook.md) |
+| TDD 模板、覆盖率目标、断言风格 | [docs/tdd-guide.md](docs/tdd-guide.md) |
+| M1 原始设计文档 | [docs/explore/M1-project-management-plan.md](docs/explore/M1-project-management-plan.md) |
+| OpenSpec 规格（开发真相源） | `openspec/specs/<capability>/spec.md` |
 
-### 10.3 后端测试模板
+## 9. Git 规范
 
-**单元测试（Service）**：
-```java
-@ExtendWith(MockitoExtension.class)
-class XxxServiceTest {
-    @Mock XxxRepository repo;
-    @InjectMocks XxxService service;
-
-    @Test
-    void should_xxx_when_xxx() {
-        // Arrange - 准备测试数据
-        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-        // Act - 执行被测方法
-        Xxx result = service.xxx();
-
-        // Assert - 验证结果
-        assertThat(result.getXxx()).isEqualTo("expected");
-        verify(repo).save(any());
-    }
-}
-```
-
-**Web 层测试（Controller）**：
-```java
-@WebMvcTest(XxxController.class)
-class XxxControllerTest {
-    @Autowired MockMvc mockMvc;
-    @MockBean XxxService xxxService;
-
-    @Test
-    void should_return_xxx_when_get() throws Exception {
-        when(xxxService.list()).thenReturn(List.of());
-
-        mockMvc.perform(get("/api/v1/xxx"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data").isArray());
-    }
-}
-```
-
-**集成测试**：
-```java
-@SpringBootTest
-@AutoConfigureMockMvc
-@ActiveProfiles("test")
-class XxxIntegrationTest {
-    @Autowired MockMvc mockMvc;
-
-    @Test
-    void should_create_xxx() throws Exception {
-        mockMvc.perform(post("/api/v1/xxx")
-            .contentType(MediaType.APPLICATION_JSON)
-            .content("""
-              {"name":"Test","type":"LIST_DETAIL"}
-              """))
-            .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.data.name").value("Test"));
-    }
-}
-```
-
-### 10.4 测试覆盖率目标
-
-| 层级 | 目标覆盖率 |
-|------|-----------|
-| Service | >80% |
-| Repository | >70% |
-| Controller | >70% |
-
-### 10.5 测试数据构建器
-
-```java
-class CrawlConfigBuilder {
-    private String name = "测试配置";
-    private String pageType = "LIST_DETAIL";
-    private String startUrl = "https://example.com";
-
-    CrawlConfigBuilder withName(String name) { this.name = name; return this; }
-    CrawlConfigBuilder withPageType(String type) { this.pageType = type; return this; }
-    CrawlConfig build() { return new CrawlConfig(null, name, pageType, startUrl, "ACTIVE"); }
-}
-```
-
-### 10.6 Testcontainers（集成测试）
-
-```java
-@DataJpaTest
-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import(TestContainersConfig.class)
-class XxxRepositoryTest {
-    // 使用真实 PostgreSQL 容器进行测试
-}
-```
-
-### 10.7 验证命令
-
-```bash
-# 后端完整验证
-cd backend
-mvn clean test          # 运行所有测试
-mvn test jacoco:report   # 生成覆盖率报告
-
-# 验证覆盖率达标
-mvn verify
-```
-
----
-
-## 11. OpenSpec Specs 真相源
-
-所有开发需求、评审和实现追踪以 `openspec/specs/` 下的 specs 为准：
-
-| Capability | 说明 |
-|-----------|------|
-| `project-management` | 项目配置生命周期、页面类型模式、状态 |
-| `page-visual-selection` | 浏览器会话、截图流、点击生成选择器 |
-| `selector-rule-management` | 字段定义、选择器类型约束、detail_url 必填 |
-| `extraction-template` | 抽取模板、DOM提取、多值、类型校验、重解析 |
-| `crawl-execution` | 任务生命周期、爬取流程、优雅停止 |
-| `extraction-preview-validation` | 实时预览、字段提取、部分成功 |
-| `data-persistence` | raw_html保留、custom_fields JSON、查询导出 |
-| `system-boundaries` | MVP约束（单会话/单用户/无认证/无反爬）|
-
-归档记录：`openspec/changes/archive/2026-05-26-bootstrap-visual-crawler-specs/`
+分支：`feature/{name}` / `fix/{desc}` / `refactor/{desc}`
+提交：`{type}: {描述}`，type: feat | fix | refactor | test | docs | chore
+默认语言：中文。

@@ -1,0 +1,67 @@
+package com.visualspider.service;
+
+import com.visualspider.entity.CrawlConfig;
+import com.visualspider.entity.CrawlField;
+import com.visualspider.enums.ConfigStatus;
+import com.visualspider.exception.ConfigNotFoundException;
+import com.visualspider.repository.CrawlConfigRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+public class CrawlConfigService {
+
+    private final CrawlConfigRepository repository;
+
+    @Transactional
+    public CrawlConfig create(CrawlConfig config) {
+        if (config.getStatus() == null) {
+            config.setStatus(ConfigStatus.STOPPED);
+        }
+        return repository.save(config);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<CrawlConfig> list(Pageable pageable) {
+        return repository.findAll(pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public CrawlConfig getById(Long id) {
+        return repository.findById(id)
+                .orElseThrow(() -> new ConfigNotFoundException(id));
+    }
+
+    @Transactional
+    public void deleteById(Long id) {
+        CrawlConfig config = repository.findById(id)
+                .orElseThrow(() -> new ConfigNotFoundException(id));
+        repository.delete(config);
+    }
+
+    @Transactional
+    public CrawlConfig updateWithFields(Long id, String name, com.visualspider.enums.PageType pageType,
+                                        com.visualspider.enums.SelectorType selectorType,
+                                        List<CrawlField> newFields) {
+        CrawlConfig config = repository.findById(id)
+                .orElseThrow(() -> new ConfigNotFoundException(id));
+        if (name != null) config.setName(name);
+        if (pageType != null) config.setPageType(pageType);
+        if (selectorType != null) config.setSelectorType(selectorType);
+        // 原子全量替换：清空旧字段，添加新字段
+        config.getFields().clear();
+        if (newFields != null) {
+            for (CrawlField f : newFields) {
+                f.setConfig(config);
+                config.getFields().add(f);
+            }
+        }
+        return repository.save(config);
+    }
+}
