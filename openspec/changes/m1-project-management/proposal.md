@@ -7,7 +7,7 @@
 ### 后端
 - 新增 `CrawlConfig` 实体（name, pageType, selectorType, status）
 - 新增 `CrawlField` 实体（fieldName, fieldType, selector, pageType）
-- 实现配置和字段的Repository层（含Testcontainers集成测试）
+- 实现配置和字段的Repository层（含 @DataJpaTest 集成测试，连接本机 PostgreSQL 服务）
 - 实现配置和字段的Service层（含单元测试）
 - 实现配置和字段的Controller层（REST API，含MockMvc测试）
 - 配置删除时级联删除关联字段
@@ -69,6 +69,6 @@
 - 新增 `crawl_field` 表（含外键约束）
 
 ### 测试影响
-- Repository层使用Testcontainers连接真实PostgreSQL容器
+- Repository 层使用 @DataJpaTest 连接本机手工启动的 PostgreSQL 服务（库 `visual_spider4_test`）
 - Service层使用Mockito模拟Repository
 - Controller层使用MockMvc进行API测试

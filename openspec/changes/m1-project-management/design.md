@@ -5,7 +5,7 @@
 本设计覆盖：
 - 后端：Entity、Repository、Service、Controller层的完整实现
 - 前端：Vue Router配置、Pinia Store、API封装、页面组件
-- 测试：Repository（Testcontainers）、Service（Mockito）、Controller（MockMvc）
+- 测试：Repository（@DataJpaTest + 本机 PG）、Service（Mockito）、Controller（MockMvc）
 
 ## Goals / Non-Goals
 
@@ -87,14 +87,15 @@
 - 清晰职责分离
 - 便于单元测试
 
-### 8. Testcontainers用于Repository测试
+### 8. Repository测试用本机PG + application-test.yml
 
-**决策**: Repository集成测试使用Testcontainers启动真实PostgreSQL容器
+**决策**: Repository集成测试使用 `@DataJpaTest` + `@ActiveProfiles("test")` 直接连接本机手工启动的 PostgreSQL 服务（库 `visual_spider4_test`），不依赖 Testcontainers / Docker
 
 **理由**:
 - 真实数据库环境，测试更可靠
-- CI环境可重复运行
 - 避免内存数据库与真实数据库行为差异
+- 简化本地开发：开发者本机只需启 PG 服务即可跑测试，无需 Docker Desktop
+- 实施时（详见 §17 备注）发现 Testcontainers 1.20.x 与 Docker Desktop 29.x 在本环境有兼容 bug，已彻底移除 Testcontainers 依赖与 `IntegrationTestBase.java` 死代码
 
 ### 9. 采用 TDD（测试驱动开发）模式
 
@@ -124,7 +125,7 @@
 **TDD 应用范围**:
 - 后端所有业务逻辑（Service 层）
 - 后端 Controller 层（通过 MockMvc）
-- 后端 Repository 层（通过 Testcontainers 集成测试）
+- 后端 Repository 层（通过 @DataJpaTest + 本机 PG 集成测试）
 - 前端 Pinia Store 和 API 模块的关键行为
 - 前端页面组件的渲染逻辑和交互行为
 
@@ -138,7 +139,7 @@
 | 风险 | 描述 | 缓解措施 |
 |------|------|----------|
 | 字段全量替换丢失编辑中间状态 | 用户编辑字段时页面刷新会导致已修改但未保存的字段丢失 | 前端页面刷新时从API重新加载最新配置 |
-| Testcontainers启动慢 | 首次启动Docker容器可能需要较长时间 | 测试前确保Docker Desktop已启动，CI配置合适的超时时间 |
+| 本机PG未启动 | Repository集成测试需连本机 PG，PG 未启动会失败 | 测试前开发者手工启动本机 PG（详见 `docs/runbook.md` §PostgreSQL） |
 | 前后端字段校验不一致 | 前端表单校验与后端DTO校验可能出现差异 | 定义统一的校验规则文档，API层作为唯一数据校验点 |
 | TDD 初期节奏较慢 | 先写测试会让初期开发速度感觉变慢 | 短期投入换取长期可维护性和重构信心；随着熟练度提升会显著加快 |
 

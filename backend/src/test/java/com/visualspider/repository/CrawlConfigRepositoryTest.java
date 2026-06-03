@@ -21,8 +21,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Repository 集成测试：使用本地真实 PostgreSQL（docker-compose 中的 postgresql 容器），
- * 通过 application-test.yml 配置连接。CI 环境可替换为 Testcontainers 配置。
+ * Repository 集成测试：使用本机手工启动的 PostgreSQL 服务（库 visual_spider4_test），
+ * 通过 application-test.yml 配置连接。
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)

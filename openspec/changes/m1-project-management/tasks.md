@@ -7,9 +7,9 @@
 - [x] 1.3 创建 FieldType 枚举（TEXT, NUMBER, DATE, URL）
 - [x] 1.4 创建 ConfigStatus 枚举（ACTIVE, STOPPED，默认值 STOPPED）
 
-## 2. 后端基础 - 基础设施（Testcontainers）
+## 2. 后端基础 - 测试基础设施
 
-- [x] 2.1 创建 Testcontainers 配置类（PostgreSQL 容器复用）
+- [x] 2.1 ~~创建 Testcontainers 配置类（PostgreSQL 容器复用）~~ — 改用本机 PG + application-test.yml（详见 §17 备注）
 - [x] 2.2 创建 application-test.yml 测试配置
 
 ## 3. 后端 - Config 仓储与领域（TDD 切片 1：创建并查询配置）
@@ -176,6 +176,5 @@
 
 ## 17. 备注：基础设施调整
 
-- Testcontainers 1.20.x 与 Docker Desktop 29.x 在本环境有兼容性 bug（BadRequestException Status 400）。
-  临时方案：测试使用本地 PostgreSQL（application-test.yml，ddl-auto=create-drop）。
-  Testcontainers 依赖保留，CI 环境可切换。详见设计文档 Risks。
+- 已切到本机 PG 直连 + `application-test.yml`（`ddl-auto=create-drop`），详见 `docs/runbook.md` §PostgreSQL 启动。
+- 后续 `manual-pg-startup` change 已彻底移除 Testcontainers 依赖与 `IntegrationTestBase.java` 死代码（参见 `openspec/changes/manual-pg-startup/`）。

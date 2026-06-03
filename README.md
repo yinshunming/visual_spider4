@@ -34,20 +34,23 @@
 
 - JDK 21+
 - Node.js 18+
-- Docker Desktop（用于 PostgreSQL）
+- PostgreSQL 16+（本机服务，默认端口 5432，库 `visual_spider4`，用户 `postgres`，密码 `123456`）
 
 ### 1. 启动数据库
 
+启动本机 PostgreSQL 服务（任选其一）：
+
+- **Windows**：在"服务"中启动 `postgresql-x64-16`（EDB 安装器默认会注册为服务）
+- **macOS**：`brew services start postgresql@16`
+- **Linux**：`sudo systemctl start postgresql`
+
+验证 PostgreSQL 可达：
 ```bash
-docker compose up -d
+pg_isready -h localhost -p 5432
+# 期望输出：localhost:5432 - accepting connections
 ```
 
-验证 PostgreSQL 启动成功：
-```bash
-docker ps
-```
-
-> 也可以直接复用已运行的 `postgresql` 容器（项目开发约定）。
+> 本项目**不依赖 Docker Desktop**。如果之前用过 `docker-compose.yml` 启动容器，请改用本机 PG 服务，详见 `docs/runbook.md` §PostgreSQL。
 
 ### 2. 启动后端
 
@@ -125,7 +128,6 @@ visual_spider4/
 │   ├── runbook.md            # 运维
 │   ├── tdd-guide.md          # TDD 模板
 │   └── explore/              # 历史设计探索
-├── docker-compose.yml       # PostgreSQL 容器配置
 ├── AGENTS.md                # 项目规则（AI 必读）
 └── README.md
 ```

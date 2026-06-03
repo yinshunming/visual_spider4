@@ -12,7 +12,7 @@
 - **统一响应** `ApiResponse<T>{code, data, message}` 包络所有 controller 返回，错误也用同一包络
 - **删除走 `service.delete(entity)`，不是 `repository.deleteById(id)`** — 后者跳过 JPA cascade，导致外键违反
 - **JPA 双向上**：`CrawlConfig` 的 `fields` 集合和 `CrawlField.config` 引用必须同时维护，单边修改 cascade 不触发
-- **测试用本地 PG**，不是 Testcontainers — 见 [docs/runbook.md](docs/runbook.md) 的 Known Issues
+- **测试用本机 PG**（开发者手工启动），不是 Testcontainers — 见 [docs/runbook.md](docs/runbook.md) §PostgreSQL；未启动时后端启动日志会打印多行 banner 提示，agent 见到后会主动告知用户手工启动
 - **不写实现后再补测试**，写测试 → 失败 → 写实现 → 通过（RED→GREEN）
 
 ## 1. 仓库结构
@@ -49,7 +49,6 @@ visual_spider4/
 │       ├── m1-project-management/    # 当前活跃 change（4/4 artifacts 完成）
 │       └── archive/                  # 已归档
 ├── docs/                             # 深入文档（架构、API、运维、TDD）
-├── docker-compose.yml                # PostgreSQL
 ├── AGENTS.md                         # 本文件
 └── README.md                         # 入门与运行
 ```
@@ -70,7 +69,8 @@ npm run build                         # 生产构建
 npm test                              # vitest（前端测试，本里程碑未写）
 
 # 数据库
-docker compose up -d                  # 启动 PostgreSQL（用户手工启动的 postgresql 容器亦可）
+# 启动本机 PostgreSQL 服务（详见 docs/runbook.md §PostgreSQL）
+pg_isready -h localhost -p 5432       # 验证 PG 可达
 ```
 
 **环境变量**（后端）：`DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USERNAME` / `DB_PASSWORD`，均有默认值，详见 `application.yml`。

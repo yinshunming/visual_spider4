@@ -26,7 +26,7 @@ class HealthControllerTest {
 
     @Test
     void getHealth_returns200WithStatusUp() throws Exception {
-        HealthResponse healthResponse = new HealthResponse("UP", "UP", Instant.now().toString());
+        HealthResponse healthResponse = new HealthResponse("UP", "UP", Instant.now().toString(), null);
         when(healthService.checkHealth()).thenReturn(healthResponse);
 
         mockMvc.perform(get("/api/v1/health"))
@@ -40,7 +40,7 @@ class HealthControllerTest {
 
     @Test
     void getHealth_containsRequiredFields() throws Exception {
-        HealthResponse healthResponse = new HealthResponse("UP", "UP", "2024-01-01T00:00:00Z");
+        HealthResponse healthResponse = new HealthResponse("UP", "UP", "2024-01-01T00:00:00Z", null);
         when(healthService.checkHealth()).thenReturn(healthResponse);
 
         mockMvc.perform(get("/api/v1/health"))
@@ -55,11 +55,12 @@ class HealthControllerTest {
 
     @Test
     void getHealth_whenDatabaseDown_returnsDatabaseDown() throws Exception {
-        HealthResponse healthResponse = new HealthResponse("UP", "DOWN", Instant.now().toString());
+        HealthResponse healthResponse = new HealthResponse("UP", "DOWN", Instant.now().toString(), "PG_NOT_READY: PostgreSQL 未启动");
         when(healthService.checkHealth()).thenReturn(healthResponse);
 
         mockMvc.perform(get("/api/v1/health"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.database").value("DOWN"));
+                .andExpect(jsonPath("$.data.database").value("DOWN"))
+                .andExpect(jsonPath("$.data.message").value("PG_NOT_READY: PostgreSQL 未启动"));
     }
 }

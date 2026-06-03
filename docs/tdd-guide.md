@@ -149,7 +149,7 @@ class CrawlConfigRepositoryTest {
 }
 ```
 
-> 当前使用本机 PostgreSQL（详见 [runbook.md](runbook.md) Known Issues），不依赖 Testcontainers。
+> 当前使用本机手工启动的 PostgreSQL 服务（详见 [runbook.md](runbook.md) §PostgreSQL），不依赖 Testcontainers / Docker。
 
 ## 命名约定
 
