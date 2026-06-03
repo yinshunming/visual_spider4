@@ -17,6 +17,10 @@ build/
 *.swp
 *.swo
 *~
+backend/.settings/
+backend/.factorypath
+backend/.classpath
+backend/.project
 
 # OS
 .DS_Store
@@ -43,6 +47,9 @@ coverage/
 tmp/
 temp/
 *.tmp
+
+# OpenCode session
+.omo/
 
 # Java/Spring Boot
 target/

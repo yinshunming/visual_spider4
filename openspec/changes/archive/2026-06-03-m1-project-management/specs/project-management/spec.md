@@ -1,48 +1,6 @@
 # project-management
 
-## Purpose
-
-爬虫项目（配置）的全生命周期管理，包括创建、编辑、删除、查询、字段管理，以及页面类型模式、选择器类型、运行时状态控制。本能力提供后端 REST API 和前端配置管理 UI。
-## Requirements
-### Requirement: 项目（站点）配置生命周期
-
-系统 SHALL 允许用户创建、读取、更新和删除爬虫项目（以下简称"配置"）。每个配置代表一个目标站点的爬取设置，由 CrawlConfig 实体承载（id、name、pageType、selectorType、status、createdAt、updatedAt）。
-
-#### Scenario: 创建新项目
-- **WHEN** 用户提供项目名称（name）、页面类型（LIST_DETAIL 或 DETAIL_ONLY）、选择器类型（CSS 或 XPATH）
-- **THEN** 系统创建项目，status 默认设为 STOPPED，并返回项目 ID
-
-#### Scenario: 更新项目
-- **WHEN** 用户修改现有项目的任何字段（name、pageType、selectorType、status）
-- **THEN** 系统更新项目，并将 updatedAt 设为当前时间戳
-
-#### Scenario: 删除项目
-- **WHEN** 用户删除一个项目
-- **THEN** 系统级联删除所有关联的字段定义（CrawlField）
-
-#### Scenario: 查询项目列表
-- **WHEN** 用户请求所有项目
-- **THEN** 系统返回分页列表，每条记录包含 id、name、pageType、selectorType、status、createdAt、updatedAt
-
-### Requirement: 页面类型模式
-
-系统 SHALL 支持两种互斥的页面类型模式（由 CrawlConfig.pageType 枚举表达）。
-
-#### Scenario: 选择 LIST_DETAIL 模式
-- **WHEN** 配置的 pageType 为 LIST_DETAIL
-- **THEN** 系统支持同时定义 LIST 页面字段和 DETAIL 页面字段；爬取流程为：列表页 → 多个列表项 → 详情页
-
-#### Scenario: 选择 DETAIL_ONLY 模式
-- **WHEN** 配置的 pageType 为 DETAIL_ONLY
-- **THEN** 系统只要求定义 DETAIL 页面字段
-
-### Requirement: 项目状态
-
-配置 SHALL 拥有以下状态之一：ACTIVE（运行中）或 STOPPED（已停用），由 ConfigStatus 枚举表达。状态作为运行时标志，不影响 API 操作。**新建配置的 status 默认值为 STOPPED**（不自动启动）。
-
-#### Scenario: 停用项目
-- **WHEN** 用户将项目状态设置为 STOPPED
-- **THEN** 新任务不得启动该项目；进行中的任务继续运行直至自然结束
+## ADDED Requirements
 
 ### Requirement: 系统 SHALL 允许创建 CrawlConfig（默认 status=STOPPED）
 
@@ -228,4 +186,3 @@ GET /api/v1/configs/{configId}/fields SHALL 返回该配置关联的字段列表
 - **WHEN** 用户修改字段值并点击保存
 - **THEN** PUT /api/v1/configs/:id 携带修改后的 fields 数组
 - **AND** 后端原子替换并返回更新后的 ConfigResponse
-

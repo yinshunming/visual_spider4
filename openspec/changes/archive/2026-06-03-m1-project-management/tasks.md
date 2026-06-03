@@ -47,22 +47,22 @@
 
 ## 5. 后端 - Config API 层（TDD 切片 3：HTTP 接口）
 
-- [ ] 5.1 【RED】写 ConfigController 测试：POST /api/v1/configs 接受合法请求返回 201
-- [ ] 5.2 【GREEN】实现 CreateConfigRequest、ConfigResponse
-- [ ] 5.3 【GREEN】实现 ConfigController.create()
-- [ ] 5.4 【REFACTOR】验证测试通过
+- [x] 5.1 【RED】写 ConfigController 测试：POST /api/v1/configs 接受合法请求返回 201
+- [x] 5.2 【GREEN】实现 CreateConfigRequest、ConfigResponse
+- [x] 5.3 【GREEN】实现 ConfigController.create()
+- [x] 5.4 【REFACTOR】验证测试通过
 
-- [ ] 5.5 【RED】写测试：GET /api/v1/configs 返回分页 JSON
-- [ ] 5.6 【GREEN】实现 ConfigController.list()
-- [ ] 5.7 【REFACTOR】验证测试通过
+- [x] 5.5 【RED】写测试：GET /api/v1/configs 返回分页 JSON
+- [x] 5.6 【GREEN】实现 ConfigController.list()
+- [x] 5.7 【REFACTOR】验证测试通过
 
-- [ ] 5.8 【RED】写测试：GET /api/v1/configs/:id 存在时返回 200，不存在返回 404
-- [ ] 5.9 【GREEN】实现 ConfigController.getById()，配置全局异常处理返回 404
-- [ ] 5.10 【REFACTOR】验证测试通过
+- [x] 5.8 【RED】写测试：GET /api/v1/configs/:id 存在时返回 200，不存在返回 404
+- [x] 5.9 【GREEN】实现 ConfigController.getById()，配置全局异常处理返回 404
+- [x] 5.10 【REFACTOR】验证测试通过
 
-- [ ] 5.11 【RED】写测试：DELETE /api/v1/configs/:id 返回 204
-- [ ] 5.12 【GREEN】实现 ConfigController.delete()
-- [ ] 5.13 【REFACTOR】验证测试通过
+- [x] 5.11 【RED】写测试：DELETE /api/v1/configs/:id 返回 204
+- [x] 5.12 【GREEN】实现 ConfigController.delete()
+- [x] 5.13 【REFACTOR】验证测试通过
 
 ## 6. 后端 - Field 仓储与领域（TDD 切片 4：字段作为子资源）
 
@@ -77,52 +77,52 @@
 
 ## 7. 后端 - Field 业务层（TDD 切片 5：字段 CRUD）
 
-- [ ] 7.1 【RED】写 CrawlFieldService 测试：为存在的配置添加字段
-- [ ] 7.2 【GREEN】实现 CrawlFieldService.create(configId, request)
-- [ ] 7.3 【REFACTOR】验证测试通过
+- [x] 7.1 【RED】写 CrawlFieldService 测试：为存在的配置添加字段
+- [x] 7.2 【GREEN】实现 CrawlFieldService.create(configId, request)
+- [x] 7.3 【REFACTOR】验证测试通过
 
-- [ ] 7.4 【RED】写测试：为不存在的配置添加字段抛出 ConfigNotFoundException
-- [ ] 7.5 【GREEN】在 Service 中先校验 config 存在
-- [ ] 7.6 【REFACTOR】验证测试通过
+- [x] 7.4 【RED】写测试：为不存在的配置添加字段抛出 ConfigNotFoundException
+- [x] 7.5 【GREEN】在 Service 中先校验 config 存在
+- [x] 7.6 【REFACTOR】验证测试通过
 
-- [ ] 7.7 【RED】写测试：按 id 更新字段
-- [ ] 7.8 【GREEN】实现 CrawlFieldService.update()
-- [ ] 7.9 【REFACTOR】验证测试通过
+- [x] 7.7 【RED】写测试：按 id 更新字段
+- [x] 7.8 【GREEN】实现 CrawlFieldService.update()
+- [x] 7.9 【REFACTOR】验证测试通过
 
-- [ ] 7.10 【RED】写测试：按 id 删除字段
-- [ ] 7.11 【GREEN】实现 CrawlFieldService.delete()
-- [ ] 7.12 【REFACTOR】验证测试通过
+- [x] 7.10 【RED】写测试：按 id 删除字段
+- [x] 7.11 【GREEN】实现 CrawlFieldService.delete()
+- [x] 7.12 【REFACTOR】验证测试通过
 
-- [ ] 7.13 【RED】写测试：按 configId 查询字段列表
-- [ ] 7.14 【GREEN】实现 CrawlFieldService.listByConfigId()
-- [ ] 7.15 【REFACTOR】验证测试通过
+- [x] 7.13 【RED】写测试：按 configId 查询字段列表
+- [x] 7.14 【GREEN】实现 CrawlFieldService.listByConfigId()
+- [x] 7.15 【REFACTOR】验证测试通过
 
 ## 8. 后端 - Field API 层（TDD 切片 6：字段 HTTP 接口）
 
-- [ ] 8.1 【RED】写 FieldController 测试：POST /api/v1/configs/:id/fields 返回 201
-- [ ] 8.2 【GREEN】实现 CreateFieldRequest、FieldResponse
-- [ ] 8.3 【GREEN】实现 FieldController.addField(configId)
-- [ ] 8.4 【REFACTOR】验证测试通过
+- [x] 8.1 【RED】写 FieldController 测试：POST /api/v1/configs/:id/fields 返回 201
+- [x] 8.2 【GREEN】实现 CreateFieldRequest、FieldResponse
+- [x] 8.3 【GREEN】实现 FieldController.addField(configId)
+- [x] 8.4 【REFACTOR】验证测试通过
 
-- [ ] 8.5 【RED】写测试：GET /api/v1/configs/:id/fields 返回字段列表
-- [ ] 8.6 【GREEN】实现 FieldController.listFields(configId)
-- [ ] 8.7 【REFACTOR】验证测试通过
+- [x] 8.5 【RED】写测试：GET /api/v1/configs/:id/fields 返回字段列表
+- [x] 8.6 【GREEN】实现 FieldController.listFields(configId)
+- [x] 8.7 【REFACTOR】验证测试通过
 
-- [ ] 8.8 【RED】写测试：PUT /api/v1/fields/:id 返回 200
-- [ ] 8.9 【GREEN】实现 FieldController.update()
-- [ ] 8.10 【REFACTOR】验证测试通过
+- [x] 8.8 【RED】写测试：PUT /api/v1/fields/:id 返回 200
+- [x] 8.9 【GREEN】实现 FieldController.update()
+- [x] 8.10 【REFACTOR】验证测试通过
 
-- [ ] 8.11 【RED】写测试：DELETE /api/v1/fields/:id 返回 204
-- [ ] 8.12 【GREEN】实现 FieldController.delete()
-- [ ] 8.13 【REFACTOR】验证测试通过
+- [x] 8.11 【RED】写测试：DELETE /api/v1/fields/:id 返回 204
+- [x] 8.12 【GREEN】实现 FieldController.delete()
+- [x] 8.13 【REFACTOR】验证测试通过
 
 ## 9. 后端 - Config 全量更新字段（TDD 切片 7：原子替换）
 
-- [ ] 9.1 【RED】写测试：PUT /api/v1/configs/:id 携带 fields[] 时，删除所有旧字段并创建新字段
-- [ ] 9.2 【GREEN】实现 UpdateConfigRequest（含 fields 列表）
-- [ ] 9.3 【GREEN】实现 CrawlConfigService.update() 事务内全量替换
-- [ ] 9.4 【GREEN】实现 ConfigController.update()
-- [ ] 9.5 【REFACTOR】验证测试通过
+- [x] 9.1 【RED】写测试：PUT /api/v1/configs/:id 携带 fields[] 时，删除所有旧字段并创建新字段
+- [x] 9.2 【GREEN】实现 UpdateConfigRequest（含 fields 列表）
+- [x] 9.3 【GREEN】实现 CrawlConfigService.update() 事务内全量替换
+- [x] 9.4 【GREEN】实现 ConfigController.update()
+- [x] 9.5 【REFACTOR】验证测试通过
 
 ## 10. 前端基础 - 依赖与工具
 
