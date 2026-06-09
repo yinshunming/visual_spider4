@@ -174,8 +174,9 @@ class CrawlConfigRepositoryTest {
 - ❌ mock 静态方法、final 类
 - ❌ 用 `verifyNoMoreInteractions` 过度断言
 
-## 当前 M1 测试统计
+## 当前 M1+M2 测试统计
 
-- **37 项测试**全绿
-- 分布：Repository 7 / Service 14 / Controller 11 / Exception 5
+- **70 项后端测试**全绿（M1 37 + M2 33 = 70；含 7 个 Repository 测试需本机 PG）
+- **8 项前端测试**全绿（pageFetchStore 4 + PagePreview 4）
+- 分布：Repository 7 / Service 35（含 UrlGuard 12）/ Controller 26 / Exception 2
 - 详见 [runbook.md](runbook.md) §Backend

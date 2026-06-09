@@ -48,6 +48,8 @@ psql -h localhost -U postgres -c "SELECT version();"
 dev 模式 `application.yml` 设 `ddl-auto: update`，启动时自动建表/更新表。
 test 模式 `application-test.yml` 设 `ddl-auto: create-drop`，测试前后建/删表。
 
+> **page-fetch 配置项**：`application.yml` 中有 `page-fetch.*` 块（`timeout` / `max-size` / `user-agent`），默认值见文件注释。修改后重启后端生效。
+
 > ⚠️ **生产环境不要用 ddl-auto**。M2+ 应引入 Flyway / Liquibase 管理 migration。
 
 ### 创建库
@@ -79,12 +81,26 @@ mvn spring-boot:run
 - 首次启动自动建表（`ddl-auto: update`）
 - **如果 PG 未启动**：启动日志会打印多行 ASCII banner（关键字"PostgreSQL 未启动"），`/api/v1/health` 返回 `database: DOWN` + `message` 含明确启动指引（见下文"Agent 协作契约"）
 
+> ⚠️ **Lombok 增量编译陷阱**：`mvn spring-boot:run` 启动时只会增量编译修改过的源文件。如果 `target/classes/` 里残留了上一次失败编译的、**没经过 Lombok 处理的** `.class` 文件（如之前 `mvn compile` 报错后中断留下的），这次 `mvn spring-boot:run` 可能不重新编译它们，导致启动时报 `Unresolved compilation problems` / `The blank final field xxx may not have been initialized` / `The method setXxx is undefined for the type Xxx`。
+>
+> **解决方法**（出现上述错误时执行）：
+> ```bash
+> mvn clean compile
+> mvn spring-boot:run
+> ```
+>
+> 或一次性用打包好的 jar（推荐，绕过增量编译）：
+> ```bash
+> mvn clean package -DskipTests
+> java -jar target/visual-spider-backend-0.0.1-SNAPSHOT.jar
+> ```
+
 ### 跑测试
 
 ```bash
 cd backend
-mvn test                                   # 跑所有 38 项测试（37 旧 + 1 新 HealthServiceTest）
-mvn test -Dtest=HealthServiceTest          # 单跑新增的健康检查服务测试
+mvn test                                   # 跑所有 70 项测试（UrlGuard 12 + PageFetchService 6 + PageFetchController 8 + M1 既有 44）
+mvn test -Dtest=PageFetchServiceTest       # 单跑某类
 mvn test -Dtest='*ServiceTest'             # 按通配符
 ```
 
@@ -129,7 +145,7 @@ npm test         # vitest run（一次性）
 npm run test:watch  # 监听模式
 ```
 
-> **注意**：M1 前端组件未写 vitest 测试，仅配置了测试框架。M2+ 应补齐 store / page 测试。
+> **注意**：M1 前端组件未写 vitest 测试，仅配置了测试框架。M2 起补齐 store / 组件测试（pageFetchStore 4 + PagePreview 4 = 8 项）。
 
 ### 打包
 

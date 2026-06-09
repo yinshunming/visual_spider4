@@ -6,6 +6,7 @@
 |--------|------|
 | M0 开发环境 | ✅ 完成 |
 | M1 项目管理 | ✅ 完成 — 37 测试通过 |
+| M2 页面可视化（HTTP 同步切片） | ✅ MVP 切片完成 — 70 后端 + 8 前端测试通过 |
 | M2+ 选择器/抽取/爬取 | ⬜ 未开始 |
 
 详见 [AGENTS.md](AGENTS.md) §3 与 [openspec/specs/](openspec/specs/)。
@@ -100,20 +101,21 @@ visual_spider4/
 ├── backend/                 # Spring Boot 后端项目
 │   ├── src/main/java/com/visualspider/
 │   │   ├── Application.java
-│   │   ├── controller/      # REST 控制器（Config/Field/Health）
-│   │   ├── service/         # 业务层
+│   │   ├── config/          # WebClientConfig（HttpClient Bean）
+│   │   ├── controller/      # Config / Field / Health / PageFetch
+│   │   ├── service/         # Config / Field / Health / PageFetch / UrlGuard
 │   │   ├── repository/      # JPA 仓库
 │   │   ├── entity/          # JPA 实体
 │   │   ├── dto/             # 请求/响应 DTO
-│   │   ├── enums/           # PageType / SelectorType / FieldType / ConfigStatus / FieldPageType
+│   │   ├── enums/           # 枚举
 │   │   └── exception/       # 异常处理
-│   ├── src/test/            # 37 个测试（Repository/Service/Controller）
+│   ├── src/test/            # 70 个测试（Repository 7 / Service 35 / Controller 26 / Exception 2）
 │   └── pom.xml
 ├── frontend/                # Vue 3 前端项目
 │   ├── src/
-│   │   ├── api/             # config.js（Axios 封装）
-│   │   ├── stores/          # configStore.js（Pinia）
-│   │   ├── views/           # ConfigList.vue / ConfigEdit.vue
+│   │   ├── api/             # Axios 封装（config / pageFetch）
+│   │   ├── stores/          # Pinia store（configStore / pageFetchStore）
+│   │   ├── views/           # ConfigList / ConfigEdit / PagePreview
 │   │   ├── router/          # vue-router 配置
 │   │   ├── App.vue
 │   │   └── main.js
@@ -121,7 +123,7 @@ visual_spider4/
 │   └── package.json
 ├── openspec/                # OpenSpec 规格
 │   ├── specs/               # 9 个 capability 真相源
-│   └── changes/             # 进行中的 change 与归档
+│   └── changes/             # 归档的 change
 ├── docs/                    # 深入文档
 │   ├── architecture.md      # 架构
 │   ├── api-guide.md         # API 参考
@@ -178,6 +180,18 @@ GET /api/v1/health
 }
 ```
 
+### 页面加载（M2 同步加载 MVP）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/v1/page-fetch` | 同步抓取目标页面元信息（title / finalUrl / contentLength），返回 HTTP 200/4xx/5xx + `code` 双层语义 |
+
+```bash
+curl -X POST http://localhost:8080/api/v1/page-fetch \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com"}'
+```
+
 详细 API 文档（请求/响应示例、错误码）：[docs/api-guide.md](docs/api-guide.md)。
 
 ## 常用命令
@@ -186,8 +200,10 @@ GET /api/v1/health
 ```bash
 cd backend
 mvn clean compile        # 编译
-mvn test                 # 跑所有测试（37 项）
-mvn spring-boot:run      # 启动
+mvn test                 # 跑所有测试（70 项）
+mvn clean package -DskipTests  # 打 jar（推荐，绕过 Lombok 增量编译）
+java -jar target/visual-spider-backend-0.0.1-SNAPSHOT.jar  # 启动
+# 或：mvn spring-boot:run      # 增量编译启动（注意 Lombok 陷阱）
 ```
 
 ### 前端
@@ -197,7 +213,7 @@ npm install              # 首次安装
 npm run dev              # 开发服务器
 npm run build            # 生产构建
 npm run preview          # 预览构建
-npm test                 # 跑 vitest（需补写测试）
+npm test                 # 跑 vitest（8 项）
 ```
 
 ## 深入阅读

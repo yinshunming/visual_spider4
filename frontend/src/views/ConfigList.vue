@@ -17,9 +17,10 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="200">
+      <el-table-column label="操作" width="280">
         <template #default="{ row }">
           <el-button size="small" @click="goEdit(row.id)">编辑</el-button>
+          <el-button size="small" type="primary" plain @click="goPreview(row.id)">预览</el-button>
           <el-button size="small" type="danger" @click="onDelete(row)">删除</el-button>
         </template>
       </el-table-column>
@@ -60,6 +61,10 @@ function goNew() {
 
 function goEdit(id) {
   router.push(`/configs/${id}`)
+}
+
+function goPreview(id) {
+  router.push(`/configs/${id}/preview`)
 }
 
 async function onDelete(row) {

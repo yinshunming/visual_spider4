@@ -14,6 +14,8 @@
 - **JPA 双向上**：`CrawlConfig` 的 `fields` 集合和 `CrawlField.config` 引用必须同时维护，单边修改 cascade 不触发
 - **测试用本机 PG**（开发者手工启动），不是 Testcontainers — 见 [docs/runbook.md](docs/runbook.md) §PostgreSQL；未启动时后端启动日志会打印多行 banner 提示，agent 见到后会主动告知用户手工启动
 - **不写实现后再补测试**，写测试 → 失败 → 写实现 → 通过（RED→GREEN）
+- **Lombok 增量编译陷阱**：`mvn spring-boot:run` 启动时只增量编译修改过的源文件。如果 `target/classes/` 残留了**未经过 Lombok 处理**的旧 `.class` 文件（来自之前失败编译、IDE 调试或中断的 `mvn compile`），启动会报 `Unresolved compilation problems` / `The blank final field xxx may not have been initialized`。**遇到此错误必须先 `mvn clean compile` 或用打包好的 jar 启动**。详见 [docs/runbook.md](docs/runbook.md) §Backend
+- **多构造器歧义**：Service / Controller 用 Lombok `@RequiredArgsConstructor` 时**不能再手写第二个构造函数**（会破坏 Lombok 生成并让 Spring 报 `No default constructor found`）。如果要给测试暴露便利构造函数，把生产构造函数显式标注 `@Autowired`
 
 ## 1. 仓库结构
 
@@ -22,32 +24,34 @@ visual_spider4/
 ├── backend/                          # Spring Boot 3.2.5 + JPA + Java 21
 │   ├── src/main/java/com/visualspider/
 │   │   ├── Application.java
-│   │   ├── controller/               # REST 控制器（Config/Field/Health）
-│   │   ├── service/                  # 业务层（CrawlConfigService / CrawlFieldService）
+│   │   ├── config/                   # WebClientConfig（M2 HttpClient Bean）
+│   │   ├── controller/               # Config / Field / Health / PageFetch（M2）
+│   │   ├── service/                  # CrawlConfigService / CrawlFieldService / HealthService / PageFetchService（M2）/ UrlGuard（M2）
 │   │   ├── repository/               # JPA 仓库
 │   │   ├── entity/                   # JPA 实体（CrawlConfig, CrawlField）
 │   │   ├── dto/
-│   │   │   ├── request/              # CreateConfigRequest / CreateFieldRequest / UpdateConfigRequest
-│   │   │   └── response/             # ConfigResponse / FieldResponse
-│   │   ├── enums/                    # PageType / SelectorType / FieldType / ConfigStatus / FieldPageType
-│   │   └── exception/                # BusinessException / GlobalExceptionHandler / ConfigNotFoundException
-│   ├── src/test/                     # 37 个测试（Repository/Service/Controller）
+│   │   │   ├── request/              # CreateConfigRequest / CreateFieldRequest / UpdateConfigRequest / PageFetchRequest（M2）
+│   │   │   └── response/             # ConfigResponse / FieldResponse / PageFetchResponse（M2）
+│   │   ├── enums/                    # PageType / SelectorType / FieldType / ConfigStatus / FieldPageType / PageFetchStatus（M2）
+│   │   └── exception/                # BusinessException / ConfigNotFoundException / InvalidUrlException（M2）/ BlockedAddressException（M2）/ FetchTimeoutException（M2）/ FetchFailedException（M2）
+│   ├── src/test/                     # 70 个测试（Repository 7 / Service 35 / Controller 26 / Exception 2）
+│   ├── src/test/resources/mockito-extensions/  # mock-maker-inline（mock final HttpClient）
 │   ├── src/main/resources/application.yml
 │   ├── src/test/resources/application-test.yml
 │   └── pom.xml
 ├── frontend/                         # Vue 3 + Vite + Element Plus + Pinia
 │   └── src/
-│       ├── api/                      # config.js（Axios 封装）
-│       ├── stores/                   # configStore.js（Pinia）
-│       ├── views/                    # ConfigList.vue / ConfigEdit.vue
-│       ├── router/index.js
+│       ├── api/                      # index.js / health.js / config.js / pageFetch.js（M2）
+│       ├── stores/                   # configStore.js / pageFetchStore.js（M2）
+│       ├── views/                    # ConfigList.vue / ConfigEdit.vue / PagePreview.vue（M2）
+│       ├── router/index.js           # /, /configs, /configs/new, /configs/:id, /configs/:id/preview（M2）
 │       ├── App.vue / main.js
 │       └── vitest.config.js
 ├── openspec/
 │   ├── specs/                        # 9 个能力真相源（开发依据）
 │   └── changes/
-│       ├── m1-project-management/    # 当前活跃 change（4/4 artifacts 完成）
-│       └── archive/                  # 已归档
+│       ├── archive/                  # 已归档（m1-project-management / implement-page-loading 等）
+│       └── （无活跃 change）
 ├── docs/                             # 深入文档（架构、API、运维、TDD）
 ├── AGENTS.md                         # 本文件
 └── README.md                         # 入门与运行
@@ -58,29 +62,31 @@ visual_spider4/
 ```bash
 # 后端
 cd backend
-mvn test                              # 跑所有测试（37 项）
-mvn spring-boot:run                   # 启动服务（端口 8080）
+mvn test                              # 跑所有测试（70 项）
+mvn clean package -DskipTests         # 打 jar（推荐，绕过 Lombok 增量编译问题）
+java -jar target/visual-spider-backend-0.0.1-SNAPSHOT.jar  # 用 jar 启动
+# 或：mvn spring-boot:run             # 增量编译启动（注意 Lombok 陷阱，见 §0）
 
 # 前端
 cd frontend
 npm install
 npm run dev                           # 启动 Vite（端口 5173，已配代理 /api -> 8080）
 npm run build                         # 生产构建
-npm test                              # vitest（前端测试，本里程碑未写）
+npm test                              # vitest（8 项：pageFetchStore 4 + PagePreview 4）
 
 # 数据库
 # 启动本机 PostgreSQL 服务（详见 docs/runbook.md §PostgreSQL）
 pg_isready -h localhost -p 5432       # 验证 PG 可达
 ```
 
-**环境变量**（后端）：`DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USERNAME` / `DB_PASSWORD`，均有默认值，详见 `application.yml`。
+**环境变量**（后端）：`DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USERNAME` / `DB_PASSWORD`，均有默认值，详见 `application.yml`。`page-fetch.*` 块（`timeout` / `max-size` / `user-agent`）见 `application.yml`。
 
 ## 3. 当前里程碑状态
 
 | Capability | Spec | 实现 | 状态 |
 |-----------|------|------|------|
 | `project-management` | ✅ | ✅ | M1 完成 — 37 测试通过 |
-| `page-visual-selection` | ✅ | ⬜ | 未开始 |
+| `page-visual-selection` | ✅ | 🟡 部分 | M2 HTTP 同步加载 MVP 切片完成（PageFetchController/Service + UrlGuard + 前端 PagePreview）；Playwright + WebSocket 截图推送未开始 |
 | `selector-rule-management` | ✅ | ⬜ | 未开始 |
 | `extraction-template` | ✅ | ⬜ | 未开始 |
 | `extraction-preview-validation` | ✅ | ⬜ | 未开始 |
@@ -90,6 +96,7 @@ pg_isready -h localhost -p 5432       # 验证 PG 可达
 | `dev-environment` | ✅ | ✅ | M0 完成 |
 
 **M1 范围**：配置 CRUD + 字段 CRUD（作为配置子资源）+ 全量更新字段替换 + 前端列表/编辑页。
+**M2 已落地切片**：`POST /api/v1/page-fetch` 同步抓取目标页面元信息（title / finalUrl / contentLength），前端 `/configs/:id/preview` 页面。70 个后端测试 + 8 个前端测试全绿。详见 [openspec/changes/archive/2026-06-09-implement-page-loading/](openspec/changes/archive/2026-06-09-implement-page-loading/)。
 
 ## 4. 路由速查
 
@@ -108,12 +115,14 @@ PUT    /fields/{id}              更新字段
 DELETE /fields/{id}              删除字段
 
 GET    /health                   健康检查
+POST   /page-fetch               M2 同步页面抓取（HTTP 状态码 + body code 双层语义）
 
 前端路由：
 /                            -> /configs 重定向
-/configs                     ConfigList（列表 + 新建/编辑/删除）
+/configs                     ConfigList（列表 + 新建/编辑/删除/预览）
 /configs/new                 ConfigEdit 新建模式
 /configs/{id}                ConfigEdit 编辑模式
+/configs/{id}/preview        M2 PagePreview（URL 输入 + 加载按钮 + 元信息展示）
 ```
 
 详细 API 文档见 [docs/api-guide.md](docs/api-guide.md)。

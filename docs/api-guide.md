@@ -202,14 +202,64 @@
 
 ## 错误码汇总
 
-| code | 场景 | 触发条件 |
-|------|------|----------|
-| 200 | 成功 | 所有正常请求 |
-| 400 | 参数错误 | DTO 校验失败 / 业务参数无效 |
-| 404 | 资源不存在 | configId / id 不存在 |
-| 500 | 系统错误 | 兜底异常 |
+| code | HTTP | 场景 | 触发条件 |
+|------|------|------|----------|
+| 200  | 200 | 成功 | 所有正常请求 |
+| 400  | 200 | 参数错误（M1） | configs/fields 既有接口的 DTO 校验失败 / 业务参数无效 |
+| 404  | 200 | 资源不存在 | configId / id 不存在 |
+| 500  | 200 | 系统错误 | 兜底异常 |
+| 4001 | 400 | URL 不合法 | `/api/v1/page-fetch` 入参为空 / 非 http(s) 协议 / 非合法 URI |
+| 4002 | 502 | 目标不可达 | DNS 解析失败 / TCP 连接拒绝 / 其它 IOException |
+| 4003 | 403 | 目标地址被禁止访问 | URL host 为 `localhost` / `127.0.0.1` / `::1` |
+| 4004 | 504 | 加载超时 | 抓取超过 `page-fetch.timeout`（默认 8s） |
+| 4005 | 502 | 响应体过大 | 响应体超过 `page-fetch.max-size`（默认 2MB） |
 
-> 当前没有 401/403，**MVP 阶段不实现认证鉴权**（参见 [openspec/specs/system-boundaries/spec.md](../openspec/specs/system-boundaries/spec.md)）。
+> **注意**：M1 既有接口（configs / fields）所有响应仍然 HTTP 200 + body code 区分；M2 引入的 `/api/v1/page-fetch` 走 HTTP 状态码 + body code 双层语义，方便前端按 HTTP 分类做粗粒度处理、按 code 做精确文案提示。
+
+## 页面加载（M2 同步加载 MVP）
+
+### POST /api/v1/page-fetch
+
+同步抓取目标页面，返回标题、最终 URL、字节数等元信息。不渲染页面，不返回完整 HTML。
+
+**Request**:
+
+```json
+{ "url": "https://example.com" }
+```
+
+**Response（成功）**:
+
+```json
+{
+  "code": 200,
+  "data": {
+    "status": "SUCCESS",
+    "finalUrl": "https://example.com",
+    "title": "Example Domain",
+    "contentLength": 1256,
+    "fetchedAt": "2026-06-01T10:00:00Z"
+  },
+  "message": "success"
+}
+```
+
+**Response（错误）**：HTTP 状态码与 `code` 字段见上表错误码汇总。
+
+**配置项**（`application.yml`）：
+
+```yaml
+page-fetch:
+  timeout: 8s        # 抓取总超时
+  max-size: 2MB      # 响应体最大字节数（超出立即中止）
+  user-agent: VisualSpider4/0.1
+```
+
+**安全限制（极简版）**：
+
+- 协议白名单：仅接受 `http` / `https`
+- 拒绝最常见回环目标：URL host 为 `localhost`（不区分大小写）/ 字面 IP `127.0.0.1` / `::1`
+- 不做私网段扫描、不做 DNS 解析后再次校验（这些留待后续 SSRF 加固 change）
 
 ## curl 示例
 
@@ -229,4 +279,14 @@ curl -X PUT http://localhost:8080/api/v1/configs/1 \
 
 # 删除
 curl -X DELETE http://localhost:8080/api/v1/configs/1
+
+# 页面加载（M2）
+curl -X POST http://localhost:8080/api/v1/page-fetch \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com"}'
+
+# 危险地址（应返回 403 + code=4003）
+curl -i -X POST http://localhost:8080/api/v1/page-fetch \
+  -H "Content-Type: application/json" \
+  -d '{"url":"http://localhost"}'
 ```

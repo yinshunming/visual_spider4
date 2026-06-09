@@ -17,6 +17,11 @@ spring:
 server:
   port: 8080
 
+page-fetch:
+  timeout: 8s
+  max-size: 2MB
+  user-agent: VisualSpider4/0.1
+
 logging:
   level:
     com.visualspider: INFO

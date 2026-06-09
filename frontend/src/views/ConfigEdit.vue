@@ -1,6 +1,9 @@
 <template>
   <div class="config-edit">
-    <h1>{{ isEdit ? '编辑配置' : '新建配置' }}</h1>
+    <div class="page-header">
+      <h1>{{ isEdit ? '编辑配置' : '新建配置' }}</h1>
+      <el-button v-if="isEdit" type="primary" plain @click="goPreview">打开预览</el-button>
+    </div>
 
     <el-form :model="form" label-width="100px" v-loading="store.loading">
       <el-form-item label="名称" required>
@@ -109,6 +112,10 @@ function removeFieldRow(idx) {
   form.fields.splice(idx, 1)
 }
 
+function goPreview() {
+  if (route.params.id) router.push(`/configs/${route.params.id}/preview`)
+}
+
 async function onSave() {
   if (!form.name || !form.pageType || !form.selectorType) {
     ElMessage.warning('请填写名称、页面类型和选择器')
@@ -145,6 +152,12 @@ async function onSave() {
   max-width: 1100px;
   margin: 20px auto;
   padding: 20px;
+}
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
 }
 .actions {
   margin-top: 20px;

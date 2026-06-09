@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import ConfigList from '../views/ConfigList.vue'
 import ConfigEdit from '../views/ConfigEdit.vue'
+import PagePreview from '../views/PagePreview.vue'
 
 const routes = [
   {
@@ -21,6 +22,12 @@ const routes = [
     path: '/configs/:id',
     name: 'config-edit',
     component: ConfigEdit,
+    props: true
+  },
+  {
+    path: '/configs/:id/preview',
+    name: 'config-preview',
+    component: PagePreview,
     props: true
   }
 ]

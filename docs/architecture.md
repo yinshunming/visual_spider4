@@ -37,11 +37,16 @@ com.visualspider/
 ├── controller/                 # @RestController
 │   ├── ConfigController.java   # /api/v1/configs CRUD
 │   ├── FieldController.java    # /api/v1/configs/{id}/fields + /api/v1/fields/{id}
-│   └── HealthController.java   # /api/v1/health
+│   ├── HealthController.java   # /api/v1/health
+│   └── PageFetchController.java  # /api/v1/page-fetch（M2 同步页面元信息抓取）
+├── config/
+│   └── WebClientConfig.java    # HttpClient Bean（连接超时 8s，HTTP/1.1）
 ├── service/                    # @Service，@Transactional
 │   ├── CrawlConfigService.java
 │   ├── CrawlFieldService.java
-│   └── HealthService.java
+│   ├── HealthService.java
+│   ├── PageFetchService.java   # M2 同步抓取：UrlGuard + httpClient + 大小限制
+│   └── UrlGuard.java           # M2 协议白名单 + 回环目标拦截
 ├── repository/                 # @Repository (Spring Data JPA)
 │   ├── CrawlConfigRepository.java
 │   └── CrawlFieldRepository.java
@@ -54,19 +59,26 @@ com.visualspider/
 │   ├── request/
 │   │   ├── CreateConfigRequest.java
 │   │   ├── CreateFieldRequest.java
-│   │   └── UpdateConfigRequest.java   # 含 fields[] 列表
+│   │   ├── UpdateConfigRequest.java   # 含 fields[] 列表
+│   │   └── PageFetchRequest.java      # M2: { url: string }
 │   └── response/
 │       ├── ConfigResponse.java        # 含 fields
-│       └── FieldResponse.java
+│       ├── FieldResponse.java
+│       └── PageFetchResponse.java     # M2: { status, finalUrl, title, contentLength, fetchedAt }
 ├── enums/
 │   ├── PageType.java           # LIST_DETAIL, DETAIL_ONLY
 │   ├── SelectorType.java       # CSS, XPATH
 │   ├── FieldType.java          # TEXT, NUMBER, DATE, URL
 │   ├── ConfigStatus.java       # ACTIVE, STOPPED（默认 STOPPED）
-│   └── FieldPageType.java      # LIST, DETAIL（字段属于哪个页面）
+│   ├── FieldPageType.java      # LIST, DETAIL（字段属于哪个页面）
+│   └── PageFetchStatus.java    # M2: LOADING, SUCCESS, FAILED
 └── exception/
     ├── BusinessException.java           # 基类，code + message
     ├── ConfigNotFoundException.java     # 404 语义
+    ├── InvalidUrlException.java         # M2: code=4001
+    ├── BlockedAddressException.java     # M2: code=4003
+    ├── FetchTimeoutException.java       # M2: code=4004
+    ├── FetchFailedException.java        # M2: code=4002/4005
     └── GlobalExceptionHandler.java      # @RestControllerAdvice → ApiResponse
 ```
 
@@ -141,14 +153,17 @@ frontend/src/
 ├── api/
 │   ├── index.js             # 公共 axios 实例 (baseURL: /api/v1)
 │   ├── health.js            # 健康检查（历史遗留，WelcomePage 仍在用）
-│   └── config.js            # config + field CRUD 9 个方法
+│   ├── config.js            # config + field CRUD 9 个方法
+│   └── pageFetch.js         # M2: fetchPage({ url })
 ├── stores/
-│   └── configStore.js       # useConfigStore: list / current / loading / error + actions
+│   ├── configStore.js       # useConfigStore: list / current / loading / error + actions
+│   └── pageFetchStore.js    # M2: usePageFetchStore: status / lastResult / lastError + fetch()
 ├── router/
-│   └── index.js             # / → /configs, /configs, /configs/new, /configs/:id
+│   └── index.js             # / → /configs, /configs, /configs/new, /configs/:id, /configs/:id/preview
 └── views/
-    ├── ConfigList.vue       # 列表 + 新建/编辑/删除按钮 + 分页
-    └── ConfigEdit.vue       # 新建/编辑双模式 + 字段动态增删
+    ├── ConfigList.vue       # 列表 + 新建/编辑/删除/预览按钮 + 分页
+    ├── ConfigEdit.vue       # 新建/编辑双模式 + 字段动态增删 + 打开预览入口
+    └── PagePreview.vue      # M2: URL 输入 + 加载按钮 + loading/success/error 状态区 + 结果展示
 ```
 
 ### 关键设计决策
@@ -164,10 +179,11 @@ frontend/src/
 
 M2+ 计划新增（参考 [openspec/specs/](../openspec/specs/)）：
 
-| 能力 | 涉及层 |
-|------|--------|
-| `page-visual-selection` | 新增 `websocket/` 包（推送截图帧）、前端 Playwright 控制 UI |
-| `selector-rule-management` | 扩展 `CrawlField`，新增 detail_url 必填校验 |
-| `extraction-template` | 新增 `service/Extractor.java`，复用 Playwright + Jsoup |
-| `crawl-execution` | 新增 `service/CrawlEngine.java`，ThreadPoolExecutor 控制并发 |
-| `data-persistence` | 新增 `list_page` / `list_item` / `article` / `crawl_task` 实体 |
+| 能力 | 状态 | 涉及层 |
+|------|------|--------|
+| `page-visual-selection`（HTTP 同步加载 MVP 切片） | ✅ M2 完成 | `controller/PageFetchController` + `service/PageFetchService` + `service/UrlGuard` + `config/WebClientConfig` + 前端 `views/PagePreview.vue` + `stores/pageFetchStore.js` |
+| `page-visual-selection`（Playwright + WebSocket 推送截图） | ⬜ 未开始 | 新增 `websocket/` 包（推送截图帧）、前端 Playwright 控制 UI |
+| `selector-rule-management` | ⬜ 未开始 | 扩展 `CrawlField`，新增 detail_url 必填校验 |
+| `extraction-template` | ⬜ 未开始 | 新增 `service/Extractor.java`，复用 Playwright + Jsoup |
+| `crawl-execution` | ⬜ 未开始 | 新增 `service/CrawlEngine.java`，ThreadPoolExecutor 控制并发 |
+| `data-persistence` | ⬜ 未开始 | 新增 `list_page` / `list_item` / `article` / `crawl_task` 实体 |
