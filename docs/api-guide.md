@@ -261,6 +261,65 @@ page-fetch:
 - 拒绝最常见回环目标：URL host 为 `localhost`（不区分大小写）/ 字面 IP `127.0.0.1` / `::1`
 - 不做私网段扫描、不做 DNS 解析后再次校验（这些留待后续 SSRF 加固 change）
 
+## 浏览器会话（可视化预览）
+
+### POST /api/v1/browser/sessions
+
+打开一个 Playwright 浏览器会话（单例）。同一时间最多 1 个活跃会话；重复打开返回 `409`。
+
+**Response**：
+```json
+{ "code": 200, "data": { "sessionId": "uuid", "status": "ACTIVE", "currentUrl": null, "createdAt": "..." }, "message": "success" }
+```
+
+**错误**：
+- `code=409, message="已有活跃会话，请先关闭"` — 已有活跃会话
+
+### DELETE /api/v1/browser/sessions/{id}
+
+关闭指定会话。
+
+**Response**：`{ "code": 200, "data": null, "message": "success" }`
+
+**错误**：
+- `code=404` — sessionId 不存在或已关闭
+
+### GET /api/v1/browser/sessions
+
+查询当前会话状态。
+
+**Response（有活跃）**：`{ "code": 200, "data": { "sessionId": "uuid", "status": "ACTIVE", "currentUrl": "https://...", "createdAt": "..." }, ... }`
+**Response（无活跃）**：`{ "code": 200, "data": { "sessionId": null, "status": "CLOSED", "currentUrl": null, "createdAt": null }, ... }`
+
+## WebSocket /api/v1/ws/page
+
+浏览器会话建立后，前端通过 WebSocket 与后端交互，协议基于统一 `WsMessage` 信封：
+
+```
+{ "type": "<消息类型>", "payload": { ... } }
+```
+
+### 客户端 → 服务端
+
+| type | payload | 行为 |
+|------|---------|------|
+| `load` | `{ url, configId }` | 加载 URL；首条消息携带 configId 用于后续 saveField |
+| `click` | `{ x, y }` | 视口坐标点击；返回 `selectors` 消息 |
+| `preview` | `{ selectorType: "css"\|"xpath", selector }` | 注入高亮 + 推新截图 |
+| `saveField` | `{ pageType, fieldName, fieldType, selector }` | 落库到 crawl_field（依赖 session 绑定的 configId） |
+| `close` | `null` | 关闭浏览器会话 |
+
+### 服务端 → 客户端
+
+| type | payload | 说明 |
+|------|---------|------|
+| `state` | `{ state, message }` | `LOADED` / `ERROR` / `CLOSED` |
+| `screenshot` | `{ data: "<base64 png>" }` | 截图帧 |
+| `selectors` | `{ css: { selector, matchCount, samples }, xpath: { ... } }` | 点击返回的候选 |
+| `previewResult` | `{ matchCount, samples }` | preview 匹配数 |
+| `saveFieldResult` | `{ ok, fieldId, message }` | saveField 落库结果 |
+| `error` | `{ code, message }` | 错误：`NO_ELEMENT` / `NO_SESSION` / `NAVIGATION_FAILED` / `ALREADY_ACTIVE` / `NOT_FOUND` / `BAD_REQUEST` / `BUSINESS` / `UNKNOWN` |
+
 ## curl 示例
 
 ```bash
@@ -289,4 +348,13 @@ curl -X POST http://localhost:8080/api/v1/page-fetch \
 curl -i -X POST http://localhost:8080/api/v1/page-fetch \
   -H "Content-Type: application/json" \
   -d '{"url":"http://localhost"}'
+
+# 打开浏览器会话
+curl -X POST http://localhost:8080/api/v1/browser/sessions
+
+# 查询会话状态
+curl http://localhost:8080/api/v1/browser/sessions
+
+# 关闭浏览器会话
+curl -X DELETE http://localhost:8080/api/v1/browser/sessions/<sessionId>
 ```

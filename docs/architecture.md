@@ -38,15 +38,23 @@ com.visualspider/
 │   ├── ConfigController.java   # /api/v1/configs CRUD
 │   ├── FieldController.java    # /api/v1/configs/{id}/fields + /api/v1/fields/{id}
 │   ├── HealthController.java   # /api/v1/health
-│   └── PageFetchController.java  # /api/v1/page-fetch（M2 同步页面元信息抓取）
+│   ├── PageFetchController.java        # /api/v1/page-fetch（M2 同步页面元信息抓取）
+│   └── BrowserSessionController.java   # /api/v1/browser/sessions（M2.5 单例 Playwright 会话）
 ├── config/
-│   └── WebClientConfig.java    # HttpClient Bean（连接超时 8s，HTTP/1.1）
+│   ├── WebClientConfig.java    # HttpClient Bean（连接超时 8s，HTTP/1.1）
+│   ├── PlaywrightConfig.java   # M2.5 Playwright.create() Bean，失败降级为 null
+│   └── WebSocketConfig.java    # M2.5 注册 /api/v1/ws/page
 ├── service/                    # @Service，@Transactional
 │   ├── CrawlConfigService.java
 │   ├── CrawlFieldService.java
 │   ├── HealthService.java
 │   ├── PageFetchService.java   # M2 同步抓取：UrlGuard + httpClient + 大小限制
-│   └── UrlGuard.java           # M2 协议白名单 + 回环目标拦截
+│   ├── UrlGuard.java           # M2 协议白名单 + 回环目标拦截
+│   ├── BrowserSessionService.java    # M2.5 Playwright 单会话生命周期
+│   ├── SelectorCraftService.java     # M2.5 CSS/XPath 候选生成
+│   ├── SelectorHighlighter.java      # M2.5 注入 .vs-highlight + 计数
+│   ├── CssSelectorGenerator.java     # M2.5 自写（替代不可用的第三方库）
+│   └── XPathGenerator.java           # M2.5 Jsoup + 自写 XPath
 ├── repository/                 # @Repository (Spring Data JPA)
 │   ├── CrawlConfigRepository.java
 │   └── CrawlFieldRepository.java
@@ -59,27 +67,48 @@ com.visualspider/
 │   ├── request/
 │   │   ├── CreateConfigRequest.java
 │   │   ├── CreateFieldRequest.java
-│   │   ├── UpdateConfigRequest.java   # 含 fields[] 列表
-│   │   └── PageFetchRequest.java      # M2: { url: string }
-│   └── response/
-│       ├── ConfigResponse.java        # 含 fields
-│       ├── FieldResponse.java
-│       └── PageFetchResponse.java     # M2: { status, finalUrl, title, contentLength, fetchedAt }
+│   │   ├── UpdateConfigRequest.java            # 含 fields[] 列表
+│   │   ├── PageFetchRequest.java               # M2: { url: string }
+│   │   └── OpenBrowserSessionRequest.java      # M2.5 显式空 record
+│   ├── response/
+│   │   ├── ConfigResponse.java                 # 含 fields
+│   │   ├── FieldResponse.java
+│   │   ├── PageFetchResponse.java              # M2: { status, finalUrl, title, contentLength, fetchedAt }
+│   │   ├── BrowserSessionResponse.java         # M2.5 { sessionId, status, currentUrl, createdAt }
+│   │   ├── SelectorCandidate.java              # M2.5 { selector, matchCount, samples }
+│   │   └── SelectorPairResponse.java           # M2.5 { css, xpath }
+│   └── ws/                                     # M2.5 WebSocket 消息 DTO
+│       ├── WsMessage.java                      # 通用信封 { type, payload }
+│       ├── LoadPagePayload.java                # { url, configId }
+│       ├── ClickPayload.java                   # { x, y }
+│       ├── PreviewPayload.java                 # { selectorType, selector }
+│       ├── SaveFieldPayload.java               # { pageType, fieldName, fieldType, selector }
+│       ├── ScreenshotPayload.java              # { data: base64 png }
+│       ├── StatePayload.java                   # { state: LOADED|ERROR|CLOSED, message }
+│       ├── PreviewResultPayload.java           # { matchCount, samples }
+│       ├── SaveFieldResultPayload.java         # { ok, fieldId, message }
+│       └── ErrorPayload.java                   # { code, message }
 ├── enums/
 │   ├── PageType.java           # LIST_DETAIL, DETAIL_ONLY
 │   ├── SelectorType.java       # CSS, XPATH
 │   ├── FieldType.java          # TEXT, NUMBER, DATE, URL
 │   ├── ConfigStatus.java       # ACTIVE, STOPPED（默认 STOPPED）
 │   ├── FieldPageType.java      # LIST, DETAIL（字段属于哪个页面）
-│   └── PageFetchStatus.java    # M2: LOADING, SUCCESS, FAILED
-└── exception/
-    ├── BusinessException.java           # 基类，code + message
-    ├── ConfigNotFoundException.java     # 404 语义
-    ├── InvalidUrlException.java         # M2: code=4001
-    ├── BlockedAddressException.java     # M2: code=4003
-    ├── FetchTimeoutException.java       # M2: code=4004
-    ├── FetchFailedException.java        # M2: code=4002/4005
-    └── GlobalExceptionHandler.java      # @RestControllerAdvice → ApiResponse
+│   ├── PageFetchStatus.java    # M2: LOADING, SUCCESS, FAILED
+│   └── BrowserSessionStatus.java  # M2.5 ACTIVE, CLOSED
+├── exception/
+│   ├── BusinessException.java           # 基类，code + message
+│   ├── ConfigNotFoundException.java     # 404 语义
+│   ├── InvalidUrlException.java         # M2: code=4001
+│   ├── BlockedAddressException.java     # M2: code=4003
+│   ├── FetchTimeoutException.java       # M2: code=4004
+│   ├── FetchFailedException.java        # M2: code=4002/4005
+│   ├── BrowserSessionAlreadyActiveException.java  # M2.5 code=409
+│   ├── BrowserSessionNotFoundException.java      # M2.5 code=404
+│   ├── NavigationException.java                  # M2.5 code=4006
+│   └── GlobalExceptionHandler.java      # @RestControllerAdvice → ApiResponse
+└── ws/                                     # M2.5 WebSocket 端点
+    └── PageWebSocketHandler.java          # 处理 load/click/preview/saveField/close 五种消息
 ```
 
 ### 数据模型
@@ -154,10 +183,12 @@ frontend/src/
 │   ├── index.js             # 公共 axios 实例 (baseURL: /api/v1)
 │   ├── health.js            # 健康检查（历史遗留，WelcomePage 仍在用）
 │   ├── config.js            # config + field CRUD 9 个方法
-│   └── pageFetch.js         # M2: fetchPage({ url })
+│   ├── pageFetch.js         # M2: fetchPage({ url })
+│   └── browser.js           # M2.5: openSession / closeSession / getStatus / connectWs(onMessage)
 ├── stores/
 │   ├── configStore.js       # useConfigStore: list / current / loading / error + actions
-│   └── pageFetchStore.js    # M2: usePageFetchStore: status / lastResult / lastError + fetch()
+│   ├── pageFetchStore.js    # M2: usePageFetchStore: status / lastResult / lastError + fetch()
+│   └── browserSessionStore.js  # M2.5: useBrowserSessionStore: status / lastScreenshot / selectors / previewResult / saveFieldResult + loadUrl/click/preview/saveField
 ├── router/
 │   └── index.js             # / → /configs, /configs, /configs/new, /configs/:id, /configs/:id/preview
 └── views/
@@ -182,7 +213,7 @@ M2+ 计划新增（参考 [openspec/specs/](../openspec/specs/)）：
 | 能力 | 状态 | 涉及层 |
 |------|------|--------|
 | `page-visual-selection`（HTTP 同步加载 MVP 切片） | ✅ M2 完成 | `controller/PageFetchController` + `service/PageFetchService` + `service/UrlGuard` + `config/WebClientConfig` + 前端 `views/PagePreview.vue` + `stores/pageFetchStore.js` |
-| `page-visual-selection`（Playwright + WebSocket 推送截图） | ⬜ 未开始 | 新增 `websocket/` 包（推送截图帧）、前端 Playwright 控制 UI |
+| `page-visual-selection`（Playwright + WebSocket 端到端） | ✅ M2.5 完成（`visual-selector-craft` change） | `controller/BrowserSessionController` + `service/BrowserSessionService` + `service/SelectorCraftService` + `service/SelectorHighlighter` + `ws/PageWebSocketHandler` + `config/PlaywrightConfig` + `config/WebSocketConfig` + 前端 `api/browser.js` + `stores/browserSessionStore.js` |
 | `selector-rule-management` | ⬜ 未开始 | 扩展 `CrawlField`，新增 detail_url 必填校验 |
 | `extraction-template` | ⬜ 未开始 | 新增 `service/Extractor.java`，复用 Playwright + Jsoup |
 | `crawl-execution` | ⬜ 未开始 | 新增 `service/CrawlEngine.java`，ThreadPoolExecutor 控制并发 |

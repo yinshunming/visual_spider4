@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import PagePreview from './PagePreview.vue'
-import { usePageFetchStore } from '../stores/pageFetchStore'
+import { useBrowserSessionStore } from '../stores/browserSessionStore'
 
 describe('PagePreview.vue', () => {
   beforeEach(() => {
@@ -10,89 +10,84 @@ describe('PagePreview.vue', () => {
     vi.restoreAllMocks()
   })
 
-  describe('§19 初始渲染', () => {
-    it('包含 URL 输入框与加载按钮（初始 disabled）', () => {
+  describe('initial render', () => {
+    it('包含页面标题、URL 输入框、占位提示', () => {
       const wrapper = mount(PagePreview, {
-        global: { stubs: { 'el-input': true, 'el-button': true, 'el-alert': true } }
-      })
-
-      const buttons = wrapper.findAll('el-button-stub')
-      // 第一个是返回按钮，第二个是"加载"按钮
-      expect(buttons.length).toBeGreaterThanOrEqual(2)
-      const loadButton = buttons[buttons.length - 1]
-      expect(loadButton.exists()).toBe(true)
-      // 初始未输入 URL → disabled=true
-      expect(loadButton.attributes('disabled')).toBe('true')
-    })
-  })
-
-  describe('§20 点击触发请求', () => {
-    it('输入合法 URL 后点击按钮，store.fetch 被调一次', async () => {
-      const wrapper = mount(PagePreview, {
-        global: { stubs: { 'el-input': false, 'el-button': false, 'el-alert': true } }
-      })
-      const store = usePageFetchStore()
-      const fetchSpy = vi.spyOn(store, 'fetch').mockResolvedValue()
-
-      const vm = wrapper.vm
-      vm.url = 'https://example.com'
-      await vm.$nextTick()
-      await vm.onLoad()
-
-      expect(fetchSpy).toHaveBeenCalledTimes(1)
-      expect(fetchSpy).toHaveBeenCalledWith({ url: 'https://example.com' })
-    })
-  })
-
-  describe('§21 成功展示', () => {
-    it('store.status=success + lastResult.title 时页面展示 title', async () => {
-      const wrapper = mount(PagePreview, {
+        props: { id: 1 },
         global: {
           stubs: {
             'el-input': true,
             'el-button': true,
+            'el-form': true,
+            'el-form-item': true,
             'el-alert': true,
-            'el-descriptions': { template: '<div class="desc"><slot /></div>' },
-            'el-descriptions-item': { template: '<div class="desc-item"><span class="label">{{ label }}</span><span class="value"><slot /></span></div>', props: ['label'] }
+            'el-radio': true,
+            'el-radio-group': true,
+            'el-select': true,
+            'el-option': true
           }
         }
       })
-      const store = usePageFetchStore()
-      store.status = 'success'
-      store.lastResult = {
-        status: 'SUCCESS',
-        finalUrl: 'https://example.com',
-        title: 'Example Domain',
-        contentLength: 1234,
-        fetchedAt: '2026-06-01T00:00:00Z'
+      expect(wrapper.text()).toContain('页面预览')
+      expect(wrapper.text()).toContain('尚未加载')
+      const buttons = wrapper.findAll('el-button-stub')
+      expect(buttons.length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('空 URL 时 isValidUrl=false, computed 阻止 load', () => {
+      const wrapper = mount(PagePreview, {
+        props: { id: 1 },
+        global: { stubs: { 'el-input': true, 'el-button': true, 'el-form': true, 'el-form-item': true, 'el-alert': true, 'el-radio': true, 'el-radio-group': true, 'el-select': true, 'el-option': true } }
+      })
+      expect(wrapper.vm.isValidUrl).toBe(false)
+    })
+
+    it('进入页面时自动 connect + openSession', async () => {
+      const store = useBrowserSessionStore()
+      const connectSpy = vi.spyOn(store, 'connect').mockResolvedValue()
+      const openSpy = vi.spyOn(store, 'openSession').mockResolvedValue()
+      mount(PagePreview, {
+        props: { id: 1 },
+        global: { stubs: { 'el-input': true, 'el-button': true, 'el-form': true, 'el-form-item': true, 'el-alert': true, 'el-radio': true, 'el-radio-group': true, 'el-select': true, 'el-option': true } }
+      })
+      await new Promise(r => setTimeout(r, 10))
+      expect(connectSpy).toHaveBeenCalled()
+      expect(openSpy).toHaveBeenCalled()
+    })
+  })
+
+  describe('click triggers store action', () => {
+    it('点击截图区调 browserSessionStore.click(x, y)', async () => {
+      const store = useBrowserSessionStore()
+      store.lastScreenshot = 'BASE64PNG'
+      const clickSpy = vi.spyOn(store, 'click').mockReturnValue()
+      const wrapper = mount(PagePreview, {
+        props: { id: 1 },
+        global: { stubs: { 'el-input': true, 'el-button': true, 'el-form': true, 'el-form-item': true, 'el-alert': true, 'el-radio': true, 'el-radio-group': true, 'el-select': true, 'el-option': true } }
+      })
+      await wrapper.vm.$nextTick()
+      const img = wrapper.find('img.screenshot')
+      await img.trigger('click', { offsetX: 100, offsetY: 50 })
+      expect(clickSpy).toHaveBeenCalledWith(100, 50)
+    })
+  })
+
+  describe('selectors panel', () => {
+    it('默认显示 CSS 候选,切换到 XPath 显示 xpath', async () => {
+      const store = useBrowserSessionStore()
+      const wrapper = mount(PagePreview, {
+        props: { id: 1 },
+        global: { stubs: { 'el-input': true, 'el-button': true, 'el-form': true, 'el-form-item': true, 'el-alert': true, 'el-radio': true, 'el-radio-group': true, 'el-select': true, 'el-option': true } }
+      })
+      store.selectors = {
+        css: { selector: 'div.title', matchCount: 3, samples: ['a', 'b', 'c'] },
+        xpath: { selector: '//div[contains(@class,"title")]', matchCount: 3, samples: ['a', 'b'] }
       }
       await wrapper.vm.$nextTick()
-
-      expect(wrapper.text()).toContain('Example Domain')
-      expect(wrapper.text()).toContain('https://example.com')
-    })
-  })
-
-  describe('§22 错误展示', () => {
-    it('store.status=error + lastError → 页面用红色提示展示', async () => {
-      const wrapper = mount(PagePreview, {
-        global: {
-          stubs: {
-            'el-input': true,
-            'el-button': true,
-            'el-alert': { template: '<div class="el-alert" :data-type="type">{{ title }}</div>', props: ['type', 'title', 'closable'] }
-          }
-        }
-      })
-      const store = usePageFetchStore()
-      store.status = 'error'
-      store.lastError = '目标地址被禁止访问'
+      expect(wrapper.text()).toContain('div.title')
+      wrapper.vm.selectedType = 'xpath'
       await wrapper.vm.$nextTick()
-
-      expect(wrapper.text()).toContain('目标地址被禁止访问')
-      const alert = wrapper.find('.el-alert')
-      expect(alert.exists()).toBe(true)
-      expect(alert.attributes('data-type')).toBe('error')
+      expect(wrapper.text()).toContain('//div[contains(@class,"title")]')
     })
   })
 })

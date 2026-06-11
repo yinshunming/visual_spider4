@@ -187,23 +187,70 @@ curl http://localhost:8080/api/v1/configs
 
 后端启动日志侧也会打印多行 ASCII banner（`===` 边框 + 关键字"PostgreSQL 未启动"），agent 看日志也能识别。
 
+## Playwright 启动
+
+M2 起的可视化页面预览功能依赖 Playwright 内嵌 Chromium。首次启动前需先安装 Chromium：
+
+```bash
+# 在 backend 目录下
+mvn exec:java -e -D exec.mainClass=com.microsoft.playwright.CLI -D exec.args="install chromium"
+```
+
+Windows 上 PowerShell 执行同上；首次下载约 130MB，启动时再解压到 `~/.cache/ms-playwright/`。
+
+> **如果 Chromium 未安装**：`BrowserSessionService` 在 `@PostConstruct` 阶段会捕获异常并打印多行 banner（参考 `docs/architecture.md` 中 PG 启动 banner 风格），`PlaywrightConfig` Bean 降级返回 `null`，后端其它 REST 仍可访问；`POST /api/v1/browser/sessions` 与 `POST /api/v1/ws/page` 会因 Playwright 不可用返回 503 / error。
+
+### Chromium 进程残留处理
+
+JVM 异常退出时偶有 `chrome.exe` 残留。Windows 上检查：
+
+```powershell
+tasklist /FI "IMAGENAME eq chrome.exe"
+```
+
+如有残留，`taskkill /F /IM chrome.exe` 强杀。
+
 ## Known Issues
 
-### 1. 中文 Windows 终端的编码问题
+### 1. 端口/进程残留导致 E2E 启动失败
 
-**症状**：`curl` 返回的 JSON 中中文字段显示为 `?????`。
+**症状**：`cd e2e && npm test` 报 `EADDRINUSE: address already in use :::8080` 或 `EADDRINUSE: 5173`，或后台 backend 启了两个互相争端口。
 
-**原因**：Windows PowerShell 默认 GBK 编码，JSON 里的 UTF-8 中文无法正确显示。
+**原因**：上一轮 `npm test` 异常退出时残留 `java.exe` / `chrome.exe` / `node.exe` 进程没被回收；或手工跑 jar 时漏 `Stop-Process`。
 
-**解决**：用浏览器（前端 Vue 页面）查看数据；或 PowerShell 7+；或 `cmd /c chcp 65001`。
+**解决**（Windows PowerShell）：
+```powershell
+# 强杀所有残留
+Get-Process -Name java,chrome,node -ErrorAction SilentlyContinue | Stop-Process -Force
+# 验证端口空闲
+Get-NetTCPConnection -LocalPort 8080,5173 -ErrorAction SilentlyContinue
+# 重跑
+cd e2e; npm test
+```
 
-### 2. Maven 测试首次运行慢
+### 2. 集成测试里 `npm test` 工具进程被"主动 kill"
 
-**症状**：第一次跑 `mvn test` 等待 5-10 分钟。
+**症状**：agent 工具跑 `npm test`（含 Playwright + Chromium）时报 `Unknown: ChildProcess.kill`，测试在 60s 之前被中断。
 
-**原因**：下载 Spring Boot / JPA / Mockito 等依赖。
+**原因**：某些 agent 的 bash 工具对长任务 + 子进程（Playwright spawn Chrome）的容忍度低，主动杀进程。
 
-**解决**：一次性下载；后续增量构建快。
+**解决**：用 `Start-Process -FilePath 'cmd.exe' -ArgumentList '/c','cd /d D:\opencodeSpace\visual_spider4\e2e && npm test > run.log 2>&1' -PassThru -WindowStyle Hidden` 后台跑，agent 用 `Get-Content run.log` 轮询日志判断进度。
+
+### 3. Playwright 报 `Unsupported type of argument: [I@xxx`
+
+**症状**：`page.evaluate(script, arg)` 抛 `PlaywrightException: Unsupported type of argument`。
+
+**原因**：Java `int[]` / 数组不能直接当 JS 数组传给 `page.evaluate`。
+
+**解决**：改用 `Map.of("x", ..., "y", ...)` 或 `Object[]`，让 Playwright 用 Jackson 序列化为 JSON 对象。
+
+### 4. Jackson 反序列化枚举大小写敏感
+
+**症状**：前端发 `selectorType: "css"`，后端 `mapper.convertValue` 抛 `IllegalArgumentException: not one of the values accepted for Enum class: [CSS, XPATH]`。
+
+**原因**：Jackson 默认 case-sensitive，enum value `CSS` 拒绝小写 `"css"`。
+
+**解决**：构造 `ObjectMapper` 时 `configure(MapperFeature.ACCEPT_CASE_INSENSITIVE_ENUMS, true)`（已在 `PageWebSocketHandler` 配）。
 
 ## 故障排查
 

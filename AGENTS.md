@@ -1,7 +1,7 @@
 # AGENTS.md - 可视化爬虫 MVP
 
 **项目**: visual_spider4
-**当前里程碑**: M1（项目管理）已完成；M2+ 待规划
+**当前里程碑**: M2.5（页面可视化端到端）已完成；选择器/抽取/爬取待规划
 **技术栈**: Vue3 / Vite / Element Plus / Pinia / vue-router + Spring Boot 3.2.5 / JPA / PostgreSQL 16 / Maven / Java 21
 
 ---
@@ -13,9 +13,11 @@
 - **删除走 `service.delete(entity)`，不是 `repository.deleteById(id)`** — 后者跳过 JPA cascade，导致外键违反
 - **JPA 双向上**：`CrawlConfig` 的 `fields` 集合和 `CrawlField.config` 引用必须同时维护，单边修改 cascade 不触发
 - **测试用本机 PG**（开发者手工启动），不是 Testcontainers — 见 [docs/runbook.md](docs/runbook.md) §PostgreSQL；未启动时后端启动日志会打印多行 banner 提示，agent 见到后会主动告知用户手工启动
+- **Playwright 进程残留**：`chrome.exe` 可能残留在 `Get-Process -Name chrome | Stop-Process -Force`；JVM 异常退出后请 `Get-Process -Name java | Stop-Process -Force`
 - **不写实现后再补测试**，写测试 → 失败 → 写实现 → 通过（RED→GREEN）
 - **Lombok 增量编译陷阱**：`mvn spring-boot:run` 启动时只增量编译修改过的源文件。如果 `target/classes/` 残留了**未经过 Lombok 处理**的旧 `.class` 文件（来自之前失败编译、IDE 调试或中断的 `mvn compile`），启动会报 `Unresolved compilation problems` / `The blank final field xxx may not have been initialized`。**遇到此错误必须先 `mvn clean compile` 或用打包好的 jar 启动**。详见 [docs/runbook.md](docs/runbook.md) §Backend
 - **多构造器歧义**：Service / Controller 用 Lombok `@RequiredArgsConstructor` 时**不能再手写第二个构造函数**（会破坏 Lombok 生成并让 Spring 报 `No default constructor found`）。如果要给测试暴露便利构造函数，把生产构造函数显式标注 `@Autowired`
+- **WebSocket 消息 DTO** 统一用 `WsMessage<T>{type, payload}` 信封；序列化在 `PageWebSocketHandler` 用 `ObjectMapper`（**配 `ACCEPT_CASE_INSENSITIVE_ENUMS`** 因为前端发小写 `"css"`）；`page.evaluate` 不能传 `int[]` 数组，改 `Map.of("x",..., "y",...)`
 
 ## 1. 仓库结构
 
@@ -24,34 +26,42 @@ visual_spider4/
 ├── backend/                          # Spring Boot 3.2.5 + JPA + Java 21
 │   ├── src/main/java/com/visualspider/
 │   │   ├── Application.java
-│   │   ├── config/                   # WebClientConfig（M2 HttpClient Bean）
-│   │   ├── controller/               # Config / Field / Health / PageFetch（M2）
-│   │   ├── service/                  # CrawlConfigService / CrawlFieldService / HealthService / PageFetchService（M2）/ UrlGuard（M2）
+│   │   ├── config/                   # WebClientConfig（M2） / PlaywrightConfig（M2.5）/ WebSocketConfig（M2.5）
+│   │   ├── controller/               # Config / Field / Health / PageFetch（M2）/ BrowserSession（M2.5）
+│   │   ├── service/                  # CrawlConfig / CrawlField / Health / PageFetch（M2）/ UrlGuard（M2） / BrowserSession（M2.5） / SelectorCraft / SelectorHighlighter（M2.5）/ CssSelectorGenerator / XPathGenerator（M2.5 自写，替代不可用的第三方库）
 │   │   ├── repository/               # JPA 仓库
-│   │   ├── entity/                   # JPA 实体（CrawlConfig, CrawlField）
+│   │   ├── entity/                   # CrawlConfig / CrawlField
 │   │   ├── dto/
-│   │   │   ├── request/              # CreateConfigRequest / CreateFieldRequest / UpdateConfigRequest / PageFetchRequest（M2）
-│   │   │   └── response/             # ConfigResponse / FieldResponse / PageFetchResponse（M2）
-│   │   ├── enums/                    # PageType / SelectorType / FieldType / ConfigStatus / FieldPageType / PageFetchStatus（M2）
-│   │   └── exception/                # BusinessException / ConfigNotFoundException / InvalidUrlException（M2）/ BlockedAddressException（M2）/ FetchTimeoutException（M2）/ FetchFailedException（M2）
-│   ├── src/test/                     # 70 个测试（Repository 7 / Service 35 / Controller 26 / Exception 2）
-│   ├── src/test/resources/mockito-extensions/  # mock-maker-inline（mock final HttpClient）
+│   │   │   ├── request/              # CreateConfig / CreateField / UpdateConfig / PageFetchRequest（M2）/ OpenBrowserSessionRequest（M2.5）
+│   │   │   ├── response/             # ConfigResponse / FieldResponse / PageFetchResponse（M2）/ BrowserSessionResponse（M2.5）/ SelectorCandidate（M2.5）/ SelectorPairResponse（M2.5）
+│   │   │   └── ws/                   # M2.5 WsMessage + 9 个 payload record
+│   │   ├── enums/                    # PageType / SelectorType / FieldType / ConfigStatus / FieldPageType / PageFetchStatus（M2）/ BrowserSessionStatus（M2.5）
+│   │   ├── exception/                # BusinessException / ConfigNotFound / InvalidUrl（M2）/ BlockedAddress（M2）/ FetchTimeout（M2）/ FetchFailed（M2）/ BrowserSessionAlreadyActive + NotFound + Navigation（M2.5）
+│   │   └── ws/                       # M2.5 PageWebSocketHandler（处理 load/click/preview/saveField/close）
+│   ├── src/test/                     # 101 个测试（Repository 7 / Service ~40 / Controller ~30 / 集成 1）
+│   ├── src/test/resources/mockito-extensions/  # mock-maker-inline（mock final Playwright）
 │   ├── src/main/resources/application.yml
 │   ├── src/test/resources/application-test.yml
 │   └── pom.xml
 ├── frontend/                         # Vue 3 + Vite + Element Plus + Pinia
 │   └── src/
-│       ├── api/                      # index.js / health.js / config.js / pageFetch.js（M2）
-│       ├── stores/                   # configStore.js / pageFetchStore.js（M2）
-│       ├── views/                    # ConfigList.vue / ConfigEdit.vue / PagePreview.vue（M2）
-│       ├── router/index.js           # /, /configs, /configs/new, /configs/:id, /configs/:id/preview（M2）
+│       ├── api/                      # index / health / config / pageFetch（M2）/ browser（M2.5，含 WS 客户端）
+│       ├── stores/                   # configStore / pageFetchStore（M2）/ browserSessionStore（M2.5）
+│       ├── views/                    # ConfigList / ConfigEdit / PagePreview（M2，已改造为 M2.5 全链路）
+│       ├── router/index.js           # /, /configs, /configs/new, /configs/:id, /configs/:id/preview
 │       ├── App.vue / main.js
 │       └── vitest.config.js
+├── e2e/                              # E2E 集成测试（@playwright/test，Chromium）
+│   ├── package.json
+│   ├── playwright.config.js
+│   ├── scripts/start-stack.js        # 后台拉 jar + vite dev，跑测试，关进程
+│   ├── tests/page-preview.spec.js   # 真 Chromium 跑 PagePreview 全链路
+│   └── README.md
 ├── openspec/
-│   ├── specs/                        # 9 个能力真相源（开发依据）
+│   ├── specs/                        # 9 个能力真相源
 │   └── changes/
-│       ├── archive/                  # 已归档（m1-project-management / implement-page-loading 等）
-│       └── （无活跃 change）
+│       ├── visual-selector-craft/    # 活跃 change（M2.5 实施，tasks 100/100）
+│       └── archive/                  # 已归档
 ├── docs/                             # 深入文档（架构、API、运维、TDD）
 ├── AGENTS.md                         # 本文件
 └── README.md                         # 入门与运行
@@ -62,7 +72,7 @@ visual_spider4/
 ```bash
 # 后端
 cd backend
-mvn test                              # 跑所有测试（70 项）
+mvn test                              # 跑所有测试（101 项）
 mvn clean package -DskipTests         # 打 jar（推荐，绕过 Lombok 增量编译问题）
 java -jar target/visual-spider-backend-0.0.1-SNAPSHOT.jar  # 用 jar 启动
 # 或：mvn spring-boot:run             # 增量编译启动（注意 Lombok 陷阱，见 §0）
@@ -72,21 +82,27 @@ cd frontend
 npm install
 npm run dev                           # 启动 Vite（端口 5173，已配代理 /api -> 8080）
 npm run build                         # 生产构建
-npm test                              # vitest（8 项：pageFetchStore 4 + PagePreview 4）
+npm test                              # vitest（17 项）
+
+# 端到端（真 Chromium 跑 PagePreview 全链路）
+cd e2e
+npm install
+npm run install-browser               # 装 Playwright Chromium
+npm test                              # 自动拉 jar + vite dev + 跑测试 + 关进程
 
 # 数据库
 # 启动本机 PostgreSQL 服务（详见 docs/runbook.md §PostgreSQL）
 pg_isready -h localhost -p 5432       # 验证 PG 可达
 ```
 
-**环境变量**（后端）：`DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USERNAME` / `DB_PASSWORD`，均有默认值，详见 `application.yml`。`page-fetch.*` 块（`timeout` / `max-size` / `user-agent`）见 `application.yml`。
+**环境变量**（后端）：`DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USERNAME` / `DB_PASSWORD`，均有默认值，详见 `application.yml`。`page-fetch.*` 块（`timeout` / `max-size` / `user-agent`）见 `application.yml`。`playwright.*` 块（`headless` / `navigation-timeout-ms` / `viewport.{width,height,device-scale-factor}`）见 `application.yml`。
 
 ## 3. 当前里程碑状态
 
 | Capability | Spec | 实现 | 状态 |
 |-----------|------|------|------|
-| `project-management` | ✅ | ✅ | M1 完成 — 37 测试通过 |
-| `page-visual-selection` | ✅ | 🟡 部分 | M2 HTTP 同步加载 MVP 切片完成（PageFetchController/Service + UrlGuard + 前端 PagePreview）；Playwright + WebSocket 截图推送未开始 |
+| `project-management` | ✅ | ✅ | M1 完成 |
+| `page-visual-selection` | ✅ | ✅ | M2 + M2.5 完成 — HTTP 同步加载（M2）+ Playwright 单会话 + WebSocket 端到端闭环（M2.5） |
 | `selector-rule-management` | ✅ | ⬜ | 未开始 |
 | `extraction-template` | ✅ | ⬜ | 未开始 |
 | `extraction-preview-validation` | ✅ | ⬜ | 未开始 |
@@ -96,7 +112,8 @@ pg_isready -h localhost -p 5432       # 验证 PG 可达
 | `dev-environment` | ✅ | ✅ | M0 完成 |
 
 **M1 范围**：配置 CRUD + 字段 CRUD（作为配置子资源）+ 全量更新字段替换 + 前端列表/编辑页。
-**M2 已落地切片**：`POST /api/v1/page-fetch` 同步抓取目标页面元信息（title / finalUrl / contentLength），前端 `/configs/:id/preview` 页面。70 个后端测试 + 8 个前端测试全绿。详见 [openspec/changes/archive/2026-06-09-implement-page-loading/](openspec/changes/archive/2026-06-09-implement-page-loading/)。
+**M2**：`POST /api/v1/page-fetch` 同步抓取目标页面元信息（title / finalUrl / contentLength），前端 `/configs/:id/preview` 页面。归档 [openspec/changes/archive/2026-06-09-implement-page-loading/](openspec/changes/archive/2026-06-09-implement-page-loading/)。
+**M2.5**（visual-selector-craft change）:Playwright 单会话 + WebSocket `/api/v1/ws/page` 端到端（URL 加载 → 截图帧推送 → 视口坐标点击 → CSS/XPath 候选生成 → 候选面板 → 匹配预览高亮 → 字段落库）。归档 [openspec/changes/visual-selector-craft/](openspec/changes/visual-selector-craft/)。测试与踩坑见 [docs/tdd-guide.md](docs/tdd-guide.md) §测试统计 与 [e2e/README.md](e2e/README.md) §端到端踩坑。
 
 ## 4. 路由速查
 
@@ -116,13 +133,17 @@ DELETE /fields/{id}              删除字段
 
 GET    /health                   健康检查
 POST   /page-fetch               M2 同步页面抓取（HTTP 状态码 + body code 双层语义）
+POST   /browser/sessions         M2.5 打开 Playwright 会话（单例，重复 open → 409）
+DELETE /browser/sessions/{id}   M2.5 关闭会话
+GET    /browser/sessions         M2.5 查询当前会话状态
+WS     /ws/page                  M2.5 WebSocket 端点（load/click/preview/saveField/close 五类消息）
 
 前端路由：
 /                            -> /configs 重定向
 /configs                     ConfigList（列表 + 新建/编辑/删除/预览）
 /configs/new                 ConfigEdit 新建模式
 /configs/{id}                ConfigEdit 编辑模式
-/configs/{id}/preview        M2 PagePreview（URL 输入 + 加载按钮 + 元信息展示）
+/configs/{id}/preview        PagePreview（M2.5 全链路：URL 加载 → 截图 → 候选 → 预览 → 保存字段）
 ```
 
 详细 API 文档见 [docs/api-guide.md](docs/api-guide.md)。
@@ -182,6 +203,7 @@ REFACTOR: 重构保持绿色
 | API 端点、请求/响应示例、错误码 | [docs/api-guide.md](docs/api-guide.md) |
 | 启动 / 测试 / 故障排查 / Known Issues | [docs/runbook.md](docs/runbook.md) |
 | TDD 模板、覆盖率目标、断言风格 | [docs/tdd-guide.md](docs/tdd-guide.md) |
+| 端到端测试（真 Chromium）前置与跑法 | [e2e/README.md](e2e/README.md) |
 | M1 原始设计文档 | [docs/explore/M1-project-management-plan.md](docs/explore/M1-project-management-plan.md) |
 | OpenSpec 规格（开发真相源） | `openspec/specs/<capability>/spec.md` |
 

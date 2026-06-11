@@ -1,0 +1,13 @@
+{
+  "name": "visual-spider-e2e",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "test": "node scripts/start-stack.js -- npx playwright test",
+    "test:headed": "node scripts/start-stack.js -- npx playwright test --headed",
+    "install-browser": "npx playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.0"
+  }
+}

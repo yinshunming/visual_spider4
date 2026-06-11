@@ -174,9 +174,9 @@ class CrawlConfigRepositoryTest {
 - ❌ mock 静态方法、final 类
 - ❌ 用 `verifyNoMoreInteractions` 过度断言
 
-## 当前 M1+M2 测试统计
+## 当前测试统计
 
-- **70 项后端测试**全绿（M1 37 + M2 33 = 70；含 7 个 Repository 测试需本机 PG）
-- **8 项前端测试**全绿（pageFetchStore 4 + PagePreview 4）
-- 分布：Repository 7 / Service 35（含 UrlGuard 12）/ Controller 26 / Exception 2
-- 详见 [runbook.md](runbook.md) §Backend
+- **101 项后端测试**全绿（M1 44 + M2 26 + M2.5 visual-selector-craft 31；含 Repository 集成测试需本机 PG）
+- **17 项前端测试**全绿（M2 pageFetchStore 4 + M2.5 browserSessionStore 5 + browser.test.js 2 + PagePreview 5 + PagePreviewFlow 1）
+- **1 项 E2E**（e2e/tests/page-preview.spec.js）跑通 PagePreview 全链路，需本机 PG + 后端 jar + Playwright Chromium
+- 详见 [runbook.md](runbook.md) §Backend 与 [../e2e/README.md](../e2e/README.md)

@@ -5,11 +5,12 @@
 | 里程碑 | 状态 |
 |--------|------|
 | M0 开发环境 | ✅ 完成 |
-| M1 项目管理 | ✅ 完成 — 37 测试通过 |
-| M2 页面可视化（HTTP 同步切片） | ✅ MVP 切片完成 — 70 后端 + 8 前端测试通过 |
-| M2+ 选择器/抽取/爬取 | ⬜ 未开始 |
+| M1 项目管理 | ✅ 完成 |
+| M2 页面可视化（HTTP 同步切片） | ✅ 完成 |
+| M2.5 页面可视化（Playwright + WebSocket 端到端） | ✅ 完成 |
+| 选择器/抽取/爬取 | ⬜ 未开始 |
 
-详见 [AGENTS.md](AGENTS.md) §3 与 [openspec/specs/](openspec/specs/)。
+详见 [AGENTS.md](AGENTS.md) §3 与 [openspec/specs/](openspec/specs/)。测试统计见 [docs/tdd-guide.md](docs/tdd-guide.md) §测试统计。
 
 ## 技术栈
 
@@ -98,37 +99,46 @@ npm run dev
 
 ```
 visual_spider4/
-├── backend/                 # Spring Boot 后端项目
+├── backend/                 # Spring Boot 3.2.5 + JPA + Java 21
 │   ├── src/main/java/com/visualspider/
 │   │   ├── Application.java
-│   │   ├── config/          # WebClientConfig（HttpClient Bean）
-│   │   ├── controller/      # Config / Field / Health / PageFetch
-│   │   ├── service/         # Config / Field / Health / PageFetch / UrlGuard
+│   │   ├── config/          # WebClientConfig / PlaywrightConfig / WebSocketConfig
+│   │   ├── controller/      # Config / Field / Health / PageFetch / BrowserSession
+│   │   ├── service/         # Config / Field / Health / PageFetch / UrlGuard /
+│   │   │                    # BrowserSession / SelectorCraft / SelectorHighlighter /
+│   │   │                    # CssSelectorGenerator / XPathGenerator
 │   │   ├── repository/      # JPA 仓库
 │   │   ├── entity/          # JPA 实体
-│   │   ├── dto/             # 请求/响应 DTO
-│   │   ├── enums/           # 枚举
-│   │   └── exception/       # 异常处理
-│   ├── src/test/            # 70 个测试（Repository 7 / Service 35 / Controller 26 / Exception 2）
+│   │   ├── dto/             # request/ response/ ws/ 三类
+│   │   ├── enums/           # 含 BrowserSessionStatus
+│   │   ├── exception/       # 含 BrowserSession* / NavigationException
+│   │   └── ws/              # PageWebSocketHandler
+│   ├── src/test/            # 101 个测试
 │   └── pom.xml
-├── frontend/                # Vue 3 前端项目
+├── frontend/                # Vue 3 + Vite + Element Plus + Pinia
 │   ├── src/
-│   │   ├── api/             # Axios 封装（config / pageFetch）
-│   │   ├── stores/          # Pinia store（configStore / pageFetchStore）
+│   │   ├── api/             # Axios 封装（index/health/config/pageFetch/browser）
+│   │   ├── stores/          # Pinia store（configStore/pageFetchStore/browserSessionStore）
 │   │   ├── views/           # ConfigList / ConfigEdit / PagePreview
 │   │   ├── router/          # vue-router 配置
 │   │   ├── App.vue
 │   │   └── main.js
 │   ├── vite.config.js
 │   └── package.json
+├── e2e/                     # Playwright E2E 测试（真 Chromium 跑 PagePreview 全链路）
+│   ├── tests/               # page-preview.spec.js
+│   ├── scripts/             # start-stack.js
+│   ├── playwright.config.js
+│   ├── package.json
+│   └── README.md
 ├── openspec/                # OpenSpec 规格
 │   ├── specs/               # 9 个 capability 真相源
-│   └── changes/             # 归档的 change
+│   └── changes/             # 活跃 + archive/
 ├── docs/                    # 深入文档
 │   ├── architecture.md      # 架构
 │   ├── api-guide.md         # API 参考
-│   ├── runbook.md            # 运维
-│   ├── tdd-guide.md          # TDD 模板
+│   ├── runbook.md            # 运维 + Known Issues
+│   ├── tdd-guide.md          # TDD 模板 + 测试统计
 │   └── explore/              # 历史设计探索
 ├── AGENTS.md                # 项目规则（AI 必读）
 └── README.md
@@ -200,7 +210,7 @@ curl -X POST http://localhost:8080/api/v1/page-fetch \
 ```bash
 cd backend
 mvn clean compile        # 编译
-mvn test                 # 跑所有测试（70 项）
+mvn test                 # 跑所有测试（101 项）
 mvn clean package -DskipTests  # 打 jar（推荐，绕过 Lombok 增量编译）
 java -jar target/visual-spider-backend-0.0.1-SNAPSHOT.jar  # 启动
 # 或：mvn spring-boot:run      # 增量编译启动（注意 Lombok 陷阱）
@@ -213,7 +223,15 @@ npm install              # 首次安装
 npm run dev              # 开发服务器
 npm run build            # 生产构建
 npm run preview          # 预览构建
-npm test                 # 跑 vitest（8 项）
+npm test                 # 跑 vitest（17 项）
+```
+
+### 端到端（真 Chromium，需本机 PG + Playwright Chromium 已装）
+```bash
+cd e2e
+npm install
+npm run install-browser  # 装 Playwright Chromium（仅首次）
+npm test                 # 自动拉 jar + vite dev + 跑测试 + 关进程
 ```
 
 ## 深入阅读
@@ -221,6 +239,7 @@ npm test                 # 跑 vitest（8 项）
 - [AGENTS.md](AGENTS.md) — 项目红线与约定
 - [docs/architecture.md](docs/architecture.md) — 架构与数据流
 - [docs/api-guide.md](docs/api-guide.md) — 完整 API 参考
-- [docs/runbook.md](docs/runbook.md) — 启动/测试/故障排查
+- [docs/runbook.md](docs/runbook.md) — 启动/测试/故障排查/Known Issues
 - [docs/tdd-guide.md](docs/tdd-guide.md) — TDD 模板与反模式
+- [e2e/README.md](e2e/README.md) — 端到端测试前置与踩坑
 - [openspec/specs/](openspec/specs/) — 9 个 capability 真相源

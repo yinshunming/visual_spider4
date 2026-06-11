@@ -22,6 +22,14 @@ page-fetch:
   max-size: 2MB
   user-agent: VisualSpider4/0.1
 
+playwright:
+  headless: true
+  navigation-timeout-ms: 15000
+  viewport:
+    width: 1280
+    height: 800
+    device-scale-factor: 1
+
 logging:
   level:
     com.visualspider: INFO

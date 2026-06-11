@@ -44,6 +44,11 @@ public class GlobalExceptionHandler {
         return ApiResponse.error(e.getCode(), e.getMessage());
     }
 
+    @ExceptionHandler(BrowserSessionAlreadyActiveException.class)
+    public ResponseEntity<ApiResponse<Void>> handleBrowserSessionAlreadyActive(BrowserSessionAlreadyActiveException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(e.getCode(), e.getMessage()));
+    }
+
     @ExceptionHandler(Exception.class)
     public ApiResponse<?> handleException(Exception e) {
         return ApiResponse.error(500, e.getMessage());
