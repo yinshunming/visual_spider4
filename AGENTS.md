@@ -60,8 +60,7 @@ visual_spider4/
 ├── openspec/
 │   ├── specs/                        # 9 个能力真相源
 │   └── changes/
-│       ├── visual-selector-craft/    # 活跃 change（M2.5 实施，tasks 100/100）
-│       └── archive/                  # 已归档
+│       └── archive/                  # 已归档（最新：2026-06-11-visual-selector-craft）
 ├── docs/                             # 深入文档（架构、API、运维、TDD）
 ├── AGENTS.md                         # 本文件
 └── README.md                         # 入门与运行
@@ -113,7 +112,7 @@ pg_isready -h localhost -p 5432       # 验证 PG 可达
 
 **M1 范围**：配置 CRUD + 字段 CRUD（作为配置子资源）+ 全量更新字段替换 + 前端列表/编辑页。
 **M2**：`POST /api/v1/page-fetch` 同步抓取目标页面元信息（title / finalUrl / contentLength），前端 `/configs/:id/preview` 页面。归档 [openspec/changes/archive/2026-06-09-implement-page-loading/](openspec/changes/archive/2026-06-09-implement-page-loading/)。
-**M2.5**（visual-selector-craft change）:Playwright 单会话 + WebSocket `/api/v1/ws/page` 端到端（URL 加载 → 截图帧推送 → 视口坐标点击 → CSS/XPath 候选生成 → 候选面板 → 匹配预览高亮 → 字段落库）。归档 [openspec/changes/visual-selector-craft/](openspec/changes/visual-selector-craft/)。测试与踩坑见 [docs/tdd-guide.md](docs/tdd-guide.md) §测试统计 与 [e2e/README.md](e2e/README.md) §端到端踩坑。
+**M2.5**（visual-selector-craft change）:Playwright 单会话 + WebSocket `/api/v1/ws/page` 端到端（URL 加载 → 截图帧推送 → 视口坐标点击 → CSS/XPath 候选生成 → 候选面板 → 匹配预览高亮 → 字段落库）。归档 [openspec/changes/archive/2026-06-11-visual-selector-craft/](openspec/changes/archive/2026-06-11-visual-selector-craft/)。测试与踩坑见 [docs/tdd-guide.md](docs/tdd-guide.md) §测试统计 与 [e2e/README.md](e2e/README.md) §端到端踩坑。
 
 ## 4. 路由速查
 

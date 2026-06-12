@@ -48,8 +48,12 @@ npm test
 
 - `e2e/logs/backend.log` — 后端启动 + Playwright banner + 业务日志
 - `e2e/logs/frontend.log` — Vite dev 输出
-- `e2e/test-results/*.png` — 测试步骤截图（loaded / after-click / preview / saved）
-- `e2e/test-results/report.html` — Playwright HTML 报告（失败时含 trace）
+- `e2e/test-results/01-loaded.png` 等 — 测试步骤截图（仅失败时保留）
+- `e2e/test-results/<test>-chromium/test-failed-1.png` — Playwright 自动截图
+- `e2e/test-results/<test>-chromium/trace.zip` — Playwright trace（用 `npx playwright show-trace <zip>` 打开）
+- `e2e/playwright-report/index.html` — Playwright HTML 报告（用 `npx playwright show-report` 打开）
+
+> 上述目录都已加入 `.gitignore`（`e2e/test-results/` / `e2e/logs/` / `e2e/playwright-report/` / `e2e/run.log` / `e2e/run.pid`），不会进版本库。
 
 ## 写测试做了什么
 
