@@ -5,7 +5,6 @@ import com.visualspider.entity.CrawlField;
 import com.visualspider.enums.ConfigStatus;
 import com.visualspider.exception.ConfigNotFoundException;
 import com.visualspider.repository.CrawlConfigRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -14,10 +13,13 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 @Service
-@RequiredArgsConstructor
 public class CrawlConfigService {
 
     private final CrawlConfigRepository repository;
+
+    public CrawlConfigService(CrawlConfigRepository repository) {
+        this.repository = repository;
+    }
 
     @Transactional
     public CrawlConfig create(CrawlConfig config) {
@@ -35,6 +37,17 @@ public class CrawlConfigService {
     @Transactional(readOnly = true)
     public CrawlConfig getById(Long id) {
         return repository.findById(id)
+                .orElseThrow(() -> new ConfigNotFoundException(id));
+    }
+
+    /**
+     * 加载 CrawlConfig 并立即加载 fields(@EntityGraph)。
+     * 用于 WebSocket / 后台线程等"Service 调用结束后才用 fields"的场景,
+     * 避免触发 LazyInitializationException。
+     */
+    @Transactional(readOnly = true)
+    public CrawlConfig getByIdWithFields(Long id) {
+        return repository.findByIdWithFields(id)
                 .orElseThrow(() -> new ConfigNotFoundException(id));
     }
 
