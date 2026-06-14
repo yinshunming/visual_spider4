@@ -30,97 +30,186 @@
       <el-alert type="error" :closable="false" :title="browserStore.error" />
     </div>
 
-    <div v-if="browserStore.lastScreenshot" class="screenshot-block">
-      <img
-        :src="`data:image/png;base64,${browserStore.lastScreenshot}`"
-        alt="page screenshot"
-        class="screenshot"
-        width="1280"
-        @click="onImgClick"
-      />
-      <div class="hint">该元素位于 iframe / shadow DOM 内,本期不支持深入选择</div>
-    </div>
+    <el-tabs v-model="activeTab" class="preview-tabs">
+      <el-tab-pane label="可视化造字段" name="craft">
+        <div v-if="browserStore.lastScreenshot" class="screenshot-block">
+          <img
+            :src="`data:image/png;base64,${browserStore.lastScreenshot}`"
+            alt="page screenshot"
+            class="screenshot"
+            width="1280"
+            @click="onImgClick"
+          />
+          <div class="hint">该元素位于 iframe / shadow DOM 内,本期不支持深入选择</div>
+        </div>
 
-    <div v-else class="status-block placeholder">
-      尚未加载
-    </div>
+        <div v-else class="status-block placeholder">
+          尚未加载
+        </div>
 
-    <div v-if="browserStore.selectors" class="selector-block">
-      <h3>候选选择器</h3>
-      <el-radio-group v-model="selectedType">
-        <el-radio label="css">CSS</el-radio>
-        <el-radio label="xpath">XPath</el-radio>
-      </el-radio-group>
-      <div v-if="selectedCandidate" class="candidate">
-        <div class="sel-text">{{ selectedCandidate.selector }}</div>
-        <div class="sel-meta">匹配数: {{ selectedCandidate.matchCount }} 个</div>
-        <ul class="samples">
-          <li v-for="(s, i) in selectedCandidate.samples" :key="i">{{ s }}</li>
-        </ul>
-      </div>
-      <el-button
-        type="primary"
-        :disabled="!selectedCandidate"
-        @click="onPreview"
-      >
-        预览匹配
-      </el-button>
-    </div>
-
-    <div v-if="browserStore.previewResult" class="preview-block">
-      <el-alert
-        :type="previewAlertType"
-        :closable="false"
-        :title="`匹配到 ${browserStore.previewResult.matchCount} 个元素`"
-      />
-    </div>
-
-    <div v-if="selectedCandidate" class="field-form-block">
-      <h3>字段保存</h3>
-      <el-form :model="fieldForm" label-width="100px" inline>
-        <el-form-item label="字段名">
-          <el-input v-model="fieldForm.fieldName" style="width: 200px" />
-        </el-form-item>
-        <el-form-item label="字段类型">
-          <el-select v-model="fieldForm.fieldType" style="width: 120px">
-            <el-option label="文本" value="TEXT" />
-            <el-option label="数字" value="NUMBER" />
-            <el-option label="日期" value="DATE" />
-            <el-option label="URL" value="URL" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="页面类型">
-          <el-select v-model="fieldForm.pageType" style="width: 120px">
-            <el-option label="列表" value="LIST" />
-            <el-option label="详情" value="DETAIL" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" :disabled="!canSaveField" @click="onSaveField">
-            保存
+        <div v-if="browserStore.selectors" class="selector-block">
+          <h3>候选选择器</h3>
+          <el-radio-group v-model="selectedType">
+            <el-radio label="css">CSS</el-radio>
+            <el-radio label="xpath">XPath</el-radio>
+          </el-radio-group>
+          <div v-if="selectedCandidate" class="candidate">
+            <div class="sel-text">{{ selectedCandidate.selector }}</div>
+            <div class="sel-meta">匹配数: {{ selectedCandidate.matchCount }} 个</div>
+            <ul class="samples">
+              <li v-for="(s, i) in selectedCandidate.samples" :key="i">{{ s }}</li>
+            </ul>
+          </div>
+          <el-button
+            type="primary"
+            :disabled="!selectedCandidate"
+            @click="onPreview"
+          >
+            预览匹配
           </el-button>
-        </el-form-item>
-      </el-form>
-      <div v-if="browserStore.saveFieldResult?.ok" class="ok-hint">已保存，字段 ID: {{ browserStore.saveFieldResult.fieldId }}</div>
-      <div v-else-if="browserStore.saveFieldResult && !browserStore.saveFieldResult.ok" class="err-hint">
-        {{ browserStore.saveFieldResult.message }}
-      </div>
-    </div>
+        </div>
+
+        <div v-if="browserStore.previewResult" class="preview-block">
+          <el-alert
+            :type="previewAlertType"
+            :closable="false"
+            :title="`匹配到 ${browserStore.previewResult.matchCount} 个元素`"
+          />
+        </div>
+
+        <div v-if="selectedCandidate" class="field-form-block">
+          <h3>字段保存</h3>
+          <el-form :model="fieldForm" label-width="100px" inline>
+            <el-form-item label="字段名">
+              <el-input v-model="fieldForm.fieldName" style="width: 200px" />
+            </el-form-item>
+            <el-form-item label="字段类型">
+              <el-select v-model="fieldForm.fieldType" style="width: 120px">
+                <el-option label="文本" value="TEXT" />
+                <el-option label="数字" value="NUMBER" />
+                <el-option label="日期" value="DATE" />
+                <el-option label="URL" value="URL" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="页面类型">
+              <el-select v-model="fieldForm.pageType" style="width: 120px">
+                <el-option label="列表" value="LIST" />
+                <el-option label="详情" value="DETAIL" />
+              </el-select>
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" :disabled="!canSaveField" @click="onSaveField">
+                保存
+              </el-button>
+            </el-form-item>
+          </el-form>
+          <div v-if="browserStore.saveFieldResult?.ok" class="ok-hint">已保存，字段 ID: {{ browserStore.saveFieldResult.fieldId }}</div>
+          <div v-else-if="browserStore.saveFieldResult && !browserStore.saveFieldResult.ok" class="err-hint">
+            {{ browserStore.saveFieldResult.message }}
+          </div>
+        </div>
+      </el-tab-pane>
+
+      <el-tab-pane label="按模板预览" name="extract">
+        <div class="extract-block">
+          <div class="extract-toolbar">
+            <el-radio-group v-model="extractPageType">
+              <el-radio label="LIST">列表页</el-radio>
+              <el-radio label="DETAIL">详情页</el-radio>
+            </el-radio-group>
+            <el-button
+              type="primary"
+              :disabled="isPreviewDisabled"
+              :loading="extractionStore.isLoading"
+              @click="onExtract"
+            >
+              按当前模板预览
+            </el-button>
+          </div>
+
+          <el-alert
+            v-for="(w, i) in currentWarnings"
+            :key="i"
+            type="warning"
+            :closable="false"
+            :title="w"
+            class="extract-warning"
+          />
+
+          <el-table
+            v-if="currentResult && currentResult.fields && currentResult.fields.length > 0"
+            :data="currentResult.fields"
+            class="extract-table"
+            border
+          >
+            <el-table-column prop="fieldName" label="字段名" width="160" />
+            <el-table-column prop="fieldType" label="类型" width="100" />
+            <el-table-column prop="selector" label="选择器" min-width="200" />
+            <el-table-column prop="matchCount" label="命中" width="80" />
+            <el-table-column label="状态" width="120">
+              <template #default="{ row }">
+                <el-tag :type="statusTagType(row.status)" effect="light">
+                  {{ statusLabel(row.status) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="值" min-width="220">
+              <template #default="{ row }">
+                <span v-if="!row.validatedValues || row.validatedValues.length === 0" class="muted">—</span>
+                <span v-else-if="row.validatedValues.length === 1">{{ formatValue(row.validatedValues[0]) }}</span>
+                <div v-else class="multi">
+                  <el-tag
+                    v-for="(v, idx) in row.validatedValues"
+                    :key="idx"
+                    :type="v == null ? 'danger' : 'info'"
+                    effect="plain"
+                    size="small"
+                    class="multi-tag"
+                  >
+                    {{ v == null ? 'null' : v }}
+                  </el-tag>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="说明" min-width="180">
+              <template #default="{ row }">
+                <span v-if="row.message" class="msg">{{ row.message }}</span>
+                <span v-else class="muted">—</span>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <div
+            v-else-if="currentResult && currentResult.fields && currentResult.fields.length === 0"
+            class="empty-result"
+          >
+            该模板在本页未命中任何字段
+          </div>
+          <div v-else class="placeholder extract-placeholder">
+            点击"按当前模板预览"开始
+          </div>
+        </div>
+      </el-tab-pane>
+    </el-tabs>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useBrowserSessionStore } from '../stores/browserSessionStore'
+import { useExtractionPreviewStore } from '../stores/extractionPreviewStore'
 
 const props = defineProps({
   id: { type: [String, Number], required: false }
 })
 
 const browserStore = useBrowserSessionStore()
+const extractionStore = useExtractionPreviewStore()
 const form = ref({ url: '' })
 const selectedType = ref('css')
 const fieldForm = ref({ fieldName: '', fieldType: 'TEXT', pageType: 'DETAIL' })
+const activeTab = ref('craft')
+const extractPageType = ref('LIST')
 
 const isValidUrl = computed(() => {
   const v = form.value.url && form.value.url.trim()
@@ -151,6 +240,38 @@ const canSaveField = computed(() =>
   && selectedCandidate.value?.selector
 )
 
+const currentResult = computed(() => extractionStore.getResult(extractPageType.value))
+const currentWarnings = computed(() => extractionStore.getWarnings(extractPageType.value))
+const isPreviewDisabled = computed(() =>
+  extractionStore.isLoading
+  || !browserStore.isLoaded
+)
+
+function statusTagType(s) {
+  switch (s) {
+    case 'OK': return 'success'
+    case 'TYPE_MISMATCH': return 'warning'
+    case 'NO_MATCH': return 'danger'
+    case 'SELECTOR_INVALID': return 'danger'
+    default: return 'info'
+  }
+}
+
+function statusLabel(s) {
+  switch (s) {
+    case 'OK': return 'OK'
+    case 'TYPE_MISMATCH': return '类型不符'
+    case 'NO_MATCH': return '未命中'
+    case 'SELECTOR_INVALID': return '选择器非法'
+    default: return s || ''
+  }
+}
+
+function formatValue(v) {
+  if (v == null) return 'null'
+  return String(v)
+}
+
 async function onLoad() {
   if (!isValidUrl.value) return
   browserStore.loadUrl({ url: form.value.url.trim(), configId: Number(props.id) || null })
@@ -178,8 +299,16 @@ function onSaveField() {
   })
 }
 
+function onExtract() {
+  if (isPreviewDisabled.value) return
+  extractionStore.triggerPreview(extractPageType.value)
+}
+
 onMounted(async () => {
   await browserStore.connect()
+  if (browserStore._ws) {
+    extractionStore.setWs(browserStore._ws)
+  }
   await browserStore.openSession()
 })
 
@@ -203,11 +332,23 @@ onUnmounted(() => {
 }
 .screenshot-block {
   margin-top: 20px;
+  overflow: auto;
+  max-width: 100%;
+  max-height: 70vh;
+  border: 1px solid #ddd;
+  border-radius: 2px;
 }
 .screenshot {
   display: block;
-  border: 1px solid #ddd;
   cursor: crosshair;
+  /*
+   * 锁定原始 1280px 宽度,避免被父容器(el-tab-pane / page-preview max-width: 1400)
+   * 用 max-width: 100% 隐式压缩,导致 .screenshot-block.overflow:auto 看不到完整截图。
+   * 点击坐标依赖 1:1 像素映射,不能缩放。
+   */
+  min-width: 1280px;
+  width: 1280px;
+  max-width: none;
 }
 .hint {
   margin-top: 8px;
@@ -258,5 +399,47 @@ onUnmounted(() => {
   color: #909399;
   text-align: center;
   padding: 40px 0;
+}
+.preview-tabs {
+  margin-top: 16px;
+}
+.extract-block {
+  margin-top: 12px;
+}
+.extract-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.extract-warning {
+  margin-bottom: 8px;
+}
+.extract-table {
+  margin-top: 12px;
+}
+.empty-result {
+  margin-top: 24px;
+  text-align: center;
+  color: #909399;
+  padding: 24px 0;
+}
+.extract-placeholder {
+  margin-top: 24px;
+}
+.muted {
+  color: #c0c4cc;
+}
+.multi {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.multi-tag {
+  margin: 2px;
+}
+.msg {
+  color: #e6a23c;
+  font-size: 12px;
 }
 </style>

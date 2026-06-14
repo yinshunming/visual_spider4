@@ -90,4 +90,153 @@ describe('PagePreview.vue', () => {
       expect(wrapper.text()).toContain('//div[contains(@class,"title")]')
     })
   })
+
+  describe('extract preview tab', () => {
+    it('activeTab 切到 extract 后,vm.extractPageType 默认为 LIST', async () => {
+      const wrapper = mount(PagePreview, {
+        props: { id: 1 },
+        global: {
+          stubs: {
+            'el-input': true, 'el-button': true, 'el-form': true, 'el-form-item': true,
+            'el-alert': true, 'el-radio': true, 'el-radio-group': true, 'el-select': true,
+            'el-option': true, 'el-tabs': true, 'el-tab-pane': true,
+            'el-table': true, 'el-table-column': true, 'el-tag': true
+          }
+        }
+      })
+      await wrapper.vm.$nextTick()
+      expect(wrapper.vm.activeTab).toBe('craft')
+      wrapper.vm.activeTab = 'extract'
+      await wrapper.vm.$nextTick()
+      expect(wrapper.vm.extractPageType).toBe('LIST')
+    })
+
+    it('warnings 非空时,vm.currentWarnings 返回该 pageType 警告', async () => {
+      const wrapper = mount(PagePreview, {
+        props: { id: 1 },
+        global: {
+          stubs: {
+            'el-input': true, 'el-button': true, 'el-form': true, 'el-form-item': true,
+            'el-alert': true, 'el-radio': true, 'el-radio-group': true, 'el-select': true,
+            'el-option': true, 'el-tabs': true, 'el-tab-pane': true,
+            'el-table': true, 'el-table-column': true, 'el-tag': true
+          }
+        }
+      })
+      const extractionStore = (await import('../stores/extractionPreviewStore.js')).useExtractionPreviewStore()
+      extractionStore.warnings.LIST = ['该模板未定义任何 LIST 字段']
+      wrapper.vm.activeTab = 'extract'
+      wrapper.vm.extractPageType = 'LIST'
+      await wrapper.vm.$nextTick()
+      expect(wrapper.vm.currentWarnings).toEqual(['该模板未定义任何 LIST 字段'])
+    })
+
+    it('isLoading 或未加载 URL 时,触发按钮 disabled', async () => {
+      const wrapper = mount(PagePreview, {
+        props: { id: 1 },
+        global: {
+          stubs: {
+            'el-input': true, 'el-button': true, 'el-form': true, 'el-form-item': true,
+            'el-alert': true, 'el-radio': true, 'el-radio-group': true, 'el-select': true,
+            'el-option': true, 'el-tabs': true, 'el-tab-pane': true,
+            'el-table': true, 'el-table-column': true, 'el-tag': true
+          }
+        }
+      })
+      await wrapper.vm.$nextTick()
+      wrapper.vm.activeTab = 'extract'
+      await wrapper.vm.$nextTick()
+      expect(wrapper.vm.isPreviewDisabled).toBe(true)
+    })
+
+    it('页面加载成功后,触发按钮 enabled', async () => {
+      const browserStore = useBrowserSessionStore()
+      browserStore.status = 'LOADED'
+      browserStore.currentUrl = 'http://example.com'
+      const extractionStore = (await import('../stores/extractionPreviewStore.js')).useExtractionPreviewStore()
+      extractionStore.isLoading = false
+      const wrapper = mount(PagePreview, {
+        props: { id: 1 },
+        global: {
+          stubs: {
+            'el-input': true, 'el-button': true, 'el-form': true, 'el-form-item': true,
+            'el-alert': true, 'el-radio': true, 'el-radio-group': true, 'el-select': true,
+            'el-option': true, 'el-tabs': true, 'el-tab-pane': true,
+            'el-table': true, 'el-table-column': true, 'el-tag': true
+          }
+        }
+      })
+      await wrapper.vm.$nextTick()
+      wrapper.vm.activeTab = 'extract'
+      await wrapper.vm.$nextTick()
+      expect(wrapper.vm.isPreviewDisabled).toBe(false)
+    })
+
+    it('预览请求飞行期间,触发按钮 disabled', async () => {
+      const browserStore = useBrowserSessionStore()
+      browserStore.status = 'LOADED'
+      browserStore.currentUrl = 'http://example.com'
+      const extractionStore = (await import('../stores/extractionPreviewStore.js')).useExtractionPreviewStore()
+      extractionStore.isLoading = true
+      const wrapper = mount(PagePreview, {
+        props: { id: 1 },
+        global: {
+          stubs: {
+            'el-input': true, 'el-button': true, 'el-form': true, 'el-form-item': true,
+            'el-alert': true, 'el-radio': true, 'el-radio-group': true, 'el-select': true,
+            'el-option': true, 'el-tabs': true, 'el-tab-pane': true,
+            'el-table': true, 'el-table-column': true, 'el-tag': true
+          }
+        }
+      })
+      await wrapper.vm.$nextTick()
+      wrapper.vm.activeTab = 'extract'
+      await wrapper.vm.$nextTick()
+      expect(wrapper.vm.isPreviewDisabled).toBe(true)
+    })
+
+    it('页面加载失败时,触发按钮 disabled', async () => {
+      const browserStore = useBrowserSessionStore()
+      browserStore.status = 'ERROR'
+      const extractionStore = (await import('../stores/extractionPreviewStore.js')).useExtractionPreviewStore()
+      extractionStore.isLoading = false
+      const wrapper = mount(PagePreview, {
+        props: { id: 1 },
+        global: {
+          stubs: {
+            'el-input': true, 'el-button': true, 'el-form': true, 'el-form-item': true,
+            'el-alert': true, 'el-radio': true, 'el-radio-group': true, 'el-select': true,
+            'el-option': true, 'el-tabs': true, 'el-tab-pane': true,
+            'el-table': true, 'el-table-column': true, 'el-tag': true
+          }
+        }
+      })
+      await wrapper.vm.$nextTick()
+      wrapper.vm.activeTab = 'extract'
+      await wrapper.vm.$nextTick()
+      expect(wrapper.vm.isPreviewDisabled).toBe(true)
+    })
+
+    it('statusLabel/statusTagType 在四态下都返回非空', async () => {
+      const wrapper = mount(PagePreview, {
+        props: { id: 1 },
+        global: {
+          stubs: {
+            'el-input': true, 'el-button': true, 'el-form': true, 'el-form-item': true,
+            'el-alert': true, 'el-radio': true, 'el-radio-group': true, 'el-select': true,
+            'el-option': true, 'el-tabs': true, 'el-tab-pane': true,
+            'el-table': true, 'el-table-column': true, 'el-tag': true
+          }
+        }
+      })
+      expect(wrapper.vm.statusLabel('OK')).toBe('OK')
+      expect(wrapper.vm.statusLabel('TYPE_MISMATCH')).toBe('类型不符')
+      expect(wrapper.vm.statusLabel('NO_MATCH')).toBe('未命中')
+      expect(wrapper.vm.statusLabel('SELECTOR_INVALID')).toBe('选择器非法')
+      expect(wrapper.vm.statusTagType('OK')).toBe('success')
+      expect(wrapper.vm.statusTagType('TYPE_MISMATCH')).toBe('warning')
+      expect(wrapper.vm.statusTagType('NO_MATCH')).toBe('danger')
+      expect(wrapper.vm.statusTagType('SELECTOR_INVALID')).toBe('danger')
+    })
+  })
 })

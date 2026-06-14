@@ -14,6 +14,10 @@ export const useBrowserSessionStore = defineStore('browserSession', {
     _ws: null
   }),
 
+  getters: {
+    isLoaded: (state) => state.status === 'LOADED'
+  },
+
   actions: {
     async connect() {
       if (this._ws) return
@@ -34,6 +38,7 @@ export const useBrowserSessionStore = defineStore('browserSession', {
         if (resp && resp.code === 200) {
           this.sessionId = resp.data.sessionId
           this.status = resp.data.status
+          this.currentUrl = resp.data.currentUrl || null
         } else {
           this.error = resp.message
         }
