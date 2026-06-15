@@ -307,6 +307,7 @@ page-fetch:
 | `click` | `{ x, y }` | 视口坐标点击；返回 `selectors` 消息 |
 | `preview` | `{ selectorType: "css"\|"xpath", selector }` | 注入高亮 + 推新截图 |
 | `saveField` | `{ pageType, fieldName, fieldType, selector }` | 落库到 crawl_field（依赖 session 绑定的 configId） |
+| `previewTemplate` | `{ pageType: "LIST"\|"DETAIL" }` | M3 按模板批量预览：对当前 Playwright Page 上指定 pageType 下所有 crawl_field 执行选择器 + 校验 |
 | `close` | `null` | 关闭浏览器会话 |
 
 ### 服务端 → 客户端
@@ -318,7 +319,111 @@ page-fetch:
 | `selectors` | `{ css: { selector, matchCount, samples }, xpath: { ... } }` | 点击返回的候选 |
 | `previewResult` | `{ matchCount, samples }` | preview 匹配数 |
 | `saveFieldResult` | `{ ok, fieldId, message }` | saveField 落库结果 |
+| `previewTemplateResult` | `{ result: { fields: [...], warnings: [...] } }` | M3 按模板预览结果，详见下文 |
 | `error` | `{ code, message }` | 错误：`NO_ELEMENT` / `NO_SESSION` / `NAVIGATION_FAILED` / `ALREADY_ACTIVE` / `NOT_FOUND` / `BAD_REQUEST` / `BUSINESS` / `UNKNOWN` |
+
+### M3: `previewTemplate` / `previewTemplateResult`
+
+**客户端 → 服务端** (`previewTemplate`)：
+
+```json
+{ "type": "previewTemplate", "payload": { "pageType": "LIST" } }
+```
+
+约束：
+- 必须**先**发送过 `load` 消息（绑定 configId）
+- 当前 BrowserSession 必须有活跃 Page，否则服务端返回 `error.code=NO_SESSION`
+
+**服务端 → 客户端** (`previewTemplateResult`)：
+
+```json
+{
+  "type": "previewTemplateResult",
+  "payload": {
+    "result": {
+      "fields": [
+        {
+          "fieldId": 1,
+          "fieldName": "title",
+          "fieldType": "TEXT",
+          "selector": ".title",
+          "matchCount": 3,
+          "rawValues": ["Game 7 Preview", "Match Recap", "Injury Update"],
+          "validatedValues": ["Game 7 Preview", "Match Recap", "Injury Update"],
+          "status": "OK"
+        },
+        {
+          "fieldId": 2,
+          "fieldName": "price",
+          "fieldType": "NUMBER",
+          "selector": ".price",
+          "matchCount": 3,
+          "rawValues": ["99", "199", "49"],
+          "validatedValues": ["99", "199", "49"],
+          "status": "OK"
+        },
+        {
+          "fieldId": 3,
+          "fieldName": "dateInvalid",
+          "fieldType": "DATE",
+          "selector": ".title",
+          "matchCount": 3,
+          "rawValues": ["Game 7 Preview", "Match Recap", "Injury Update"],
+          "validatedValues": [null, null, null],
+          "status": "TYPE_MISMATCH",
+          "message": "非 ISO 8601 日期: \"Game 7 Preview\""
+        },
+        {
+          "fieldId": 4,
+          "fieldName": "missing",
+          "fieldType": "TEXT",
+          "selector": ".no-such",
+          "matchCount": 0,
+          "rawValues": [],
+          "validatedValues": [],
+          "status": "NO_MATCH"
+        },
+        {
+          "fieldId": 5,
+          "fieldName": "broken",
+          "fieldType": "TEXT",
+          "selector": ">>>broken<<<",
+          "matchCount": 0,
+          "rawValues": [],
+          "validatedValues": [],
+          "status": "SELECTOR_INVALID",
+          "message": "SyntaxError: ..."
+        }
+      ],
+      "warnings": [
+        "LIST_DETAIL 配置缺少 detail_url 字段,M4 启动爬取时会被拦截"
+      ]
+    }
+  }
+}
+```
+
+`status` 字段级四态：
+
+| 状态 | 触发条件 | `rawValues` | `validatedValues` |
+|------|---------|-------------|--------------------|
+| `OK` | 命中 ≥1 + 全部校验通过 | 原始字符串数组 | 与 raw 等长且值合法 |
+| `TYPE_MISMATCH` | 命中 ≥1 + 至少 1 个校验失败 | 原始字符串数组 | 失败位置为 `null` |
+| `NO_MATCH` | 命中 0 | `[]` | `[]` |
+| `SELECTOR_INVALID` | Page.evaluate 抛错 | `[]` | `[]` + `message` 含错误 |
+
+`warnings` 软警告（非阻塞）：
+
+- `"该模板未定义任何 <pageType> 字段"` — 该 pageType 下零字段
+- `"LIST_DETAIL 配置缺少 detail_url 字段,M4 启动爬取时会被拦截"` — LIST_DETAIL + LIST 预览且缺 `field_name="detail_url"` + `field_type=URL` 字段
+
+**类型校验细则**（`FieldValueValidator`）：
+- `TEXT`: trim 后非空 → 合法；空串 → `null`（视为 NO_MATCH 等价）
+- `NUMBER`: `Double.parseDouble` 不抛 → 合法；**不接受千分位**（`"1,234"` 非法）
+- `DATE`: `DateTimeFormatter.ISO_DATE` 或 `ISO_DATE_TIME` 能解析 → 合法；**严格 ISO 8601**（`"2026/06/12"` / `"Jun 12, 2026"` 非法）
+- `URL`: `new URI(raw).isAbsolute()` 且 scheme 为 `http`/`https` → 合法；其他（`mailto:` / `ftp://` / 相对路径）非法
+
+**URL 字段抽取策略**：在 `field_type=URL` 时优先读取元素 DOM 的 `.href`（浏览器自动绝对化相对路径）；元素无 `.href` 时退回 `textContent.trim()`。其他类型一律读 `textContent.trim()`。
 
 ## curl 示例
 

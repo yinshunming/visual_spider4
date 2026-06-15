@@ -2,6 +2,7 @@ package com.visualspider.service;
 
 import com.visualspider.exception.BlockedAddressException;
 import com.visualspider.exception.InvalidUrlException;
+import com.visualspider.exception.StartUrlInvalidException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -114,6 +115,51 @@ class UrlGuardTest {
         @DisplayName("公网域名 example.com 通过")
         void acceptsPublicDomain() {
             assertThatCode(() -> UrlGuard.check(URI.create("https://example.com")))
+                    .doesNotThrowAnyException();
+        }
+    }
+
+    @Nested
+    @DisplayName("§6 validate(url, fieldName) - M4 service 层入口")
+    class ValidateWithFieldName {
+
+        @Test
+        @DisplayName("startUrl=null 抛 StartUrlInvalidException,message 含 startUrl")
+        void nullUrl_throwsWithFieldName() {
+            assertThatThrownBy(() -> UrlGuard.validate(null, "startUrl"))
+                    .isInstanceOf(StartUrlInvalidException.class)
+                    .hasMessageContaining("startUrl");
+        }
+
+        @Test
+        @DisplayName("空字符串被拒,message 含 fieldName")
+        void emptyUrl_throwsWithFieldName() {
+            assertThatThrownBy(() -> UrlGuard.validate("   ", "startUrl"))
+                    .isInstanceOf(StartUrlInvalidException.class)
+                    .hasMessageContaining("startUrl");
+        }
+
+        @Test
+        @DisplayName("非 http(s) 协议被拒,message 含 fieldName")
+        void nonHttpScheme_throwsWithFieldName() {
+            assertThatThrownBy(() -> UrlGuard.validate("ftp://example.com/x", "startUrl"))
+                    .isInstanceOf(StartUrlInvalidException.class)
+                    .hasMessageContaining("startUrl");
+        }
+
+        @Test
+        @DisplayName("回环地址被拒,message 含 fieldName 与 回环")
+        void loopback_throwsWithFieldName() {
+            assertThatThrownBy(() -> UrlGuard.validate("http://localhost:8080/list", "startUrl"))
+                    .isInstanceOf(StartUrlInvalidException.class)
+                    .hasMessageContaining("startUrl")
+                    .hasMessageContaining("回环");
+        }
+
+        @Test
+        @DisplayName("合法公网 URL 通过")
+        void publicUrl_passes() {
+            assertThatCode(() -> UrlGuard.validate("https://example.com/list", "startUrl"))
                     .doesNotThrowAnyException();
         }
     }

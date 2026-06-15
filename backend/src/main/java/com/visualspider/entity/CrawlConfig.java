@@ -3,6 +3,7 @@ package com.visualspider.entity;
 import com.visualspider.enums.ConfigStatus;
 import com.visualspider.enums.PageType;
 import com.visualspider.enums.SelectorType;
+import com.visualspider.exception.StartUrlInvalidException;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -41,6 +42,9 @@ public class CrawlConfig {
     @Column(nullable = false)
     private String name;
 
+    @Column(name = "start_url", nullable = false)
+    private String startUrl;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "page_type", nullable = false)
     private PageType pageType;
@@ -65,6 +69,9 @@ public class CrawlConfig {
 
     @PrePersist
     void onCreate() {
+        if (startUrl == null || startUrl.isBlank()) {
+            throw new StartUrlInvalidException("startUrl 不能为空");
+        }
         Instant now = Instant.now();
         this.createdAt = now;
         this.updatedAt = now;

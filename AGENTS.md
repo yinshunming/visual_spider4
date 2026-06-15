@@ -1,7 +1,7 @@
 # AGENTS.md - 可视化爬虫 MVP
 
 **项目**: visual_spider4
-**当前里程碑**: M2.5（页面可视化端到端）已完成；选择器/抽取/爬取待规划
+**当前里程碑**: M4（手工爬取执行）已完成；raw_html 重新解析留待 M5
 **技术栈**: Vue3 / Vite / Element Plus / Pinia / vue-router + Spring Boot 3.2.5 / JPA / PostgreSQL 16 / Maven / Java 21
 
 ---
@@ -101,18 +101,19 @@ pg_isready -h localhost -p 5432       # 验证 PG 可达
 | Capability | Spec | 实现 | 状态 |
 |-----------|------|------|------|
 | `project-management` | ✅ | ✅ | M1 完成 |
-| `page-visual-selection` | ✅ | ✅ | M2 + M2.5 完成 — HTTP 同步加载（M2）+ Playwright 单会话 + WebSocket 端到端闭环（M2.5） |
+| `page-visual-selection` | ✅ | ✅ | M2 + M2.5 完成 — HTTP 同步加载(M2)+ Playwright 单会话 + WebSocket 端到端闭环(M2.5) |
 | `selector-rule-management` | ✅ | ⬜ | 未开始 |
-| `extraction-template` | ✅ | ⬜ | 未开始 |
-| `extraction-preview-validation` | ✅ | ⬜ | 未开始 |
-| `crawl-execution` | ✅ | ⬜ | 未开始 |
-| `data-persistence` | ✅ | ⬜ | 未开始 |
+| `extraction-template` | ✅ | ✅ | M3 完成 — 批量字段提取 + 类型校验内核,`POST /ws/page previewTemplate` |
+| `extraction-preview-validation` | ✅ | ✅ | M3 完成 — 字段级四态(OK/TYPE_MISMATCH/NO_MATCH/SELECTOR_INVALID),`POST /ws/page previewTemplateResult` |
+| `crawl-execution` | ✅ | ✅ | M4 完成 — 手工触发爬取,LIST_DETAIL / DETAIL_ONLY 双流程,单任务锁 |
+| `data-persistence` | ✅ | ✅ | M4 完成(5 张表: crawl_task / list_page / list_item / article / detail_url);raw_html 重新解析留 M5 |
 | `system-boundaries` | ✅ | ⬜ | 未开始 |
 | `dev-environment` | ✅ | ✅ | M0 完成 |
 
 **M1 范围**：配置 CRUD + 字段 CRUD（作为配置子资源）+ 全量更新字段替换 + 前端列表/编辑页。
 **M2**：`POST /api/v1/page-fetch` 同步抓取目标页面元信息（title / finalUrl / contentLength），前端 `/configs/:id/preview` 页面。归档 [openspec/changes/archive/2026-06-09-implement-page-loading/](openspec/changes/archive/2026-06-09-implement-page-loading/)。
 **M2.5**（visual-selector-craft change）:Playwright 单会话 + WebSocket `/api/v1/ws/page` 端到端（URL 加载 → 截图帧推送 → 视口坐标点击 → CSS/XPath 候选生成 → 候选面板 → 匹配预览高亮 → 字段落库）。归档 [openspec/changes/archive/2026-06-11-visual-selector-craft/](openspec/changes/archive/2026-06-11-visual-selector-craft/)。测试与踩坑见 [docs/tdd-guide.md](docs/tdd-guide.md) §测试统计 与 [e2e/README.md](e2e/README.md) §端到端踩坑。
+**M3**（implement-extraction-template-preview change）:在 M2.5 同一 `/configs/:id/preview` 页面加 Tab2"按模板预览"。后端 `ExtractionService` 在已加载的 Playwright Page 上对某 pageType（LIST/DETAIL）批量执行选择器，经 `FieldValueValidator` 类型校验后返回字段级四态（OK/TYPE_MISMATCH/NO_MATCH/SELECTOR_INVALID），通过 WS 消息 `previewTemplate` / `previewTemplateResult` 同步返回。`ExtractionService` 与 WS 协议解耦，供 M4 爬取执行直接复用。归档目录待用户确认。
 
 ## 4. 路由速查
 
@@ -135,7 +136,7 @@ POST   /page-fetch               M2 同步页面抓取（HTTP 状态码 + body c
 POST   /browser/sessions         M2.5 打开 Playwright 会话（单例，重复 open → 409）
 DELETE /browser/sessions/{id}   M2.5 关闭会话
 GET    /browser/sessions         M2.5 查询当前会话状态
-WS     /ws/page                  M2.5 WebSocket 端点（load/click/preview/saveField/close 五类消息）
+WS     /ws/page                  M2.5 + M3 WebSocket 端点（load/click/preview/saveField/previewTemplate/close 六类消息）
 
 前端路由：
 /                            -> /configs 重定向
@@ -146,6 +147,19 @@ WS     /ws/page                  M2.5 WebSocket 端点（load/click/preview/save
 ```
 
 详细 API 文档见 [docs/api-guide.md](docs/api-guide.md)。
+
+**M3 新增 WebSocket 消息（`/api/v1/ws/page`）**：
+
+| type | 方向 | payload | 说明 |
+|------|------|---------|------|
+| `previewTemplate` | C→S | `{pageType:"LIST"\|"DETAIL"}` | 客户端触发按模板批量预览 |
+| `previewTemplateResult` | S→C | `{result:{fields:[{fieldId,fieldName,fieldType,selector,matchCount,rawValues,validatedValues,status,message?}],warnings:[...]}}` | 服务端返回字段级四态结果 + 软警告 |
+
+**M3 字段级四态**（`FieldPreviewStatus`）：
+- `OK`：命中且全部校验通过
+- `TYPE_MISMATCH`：命中但部分值类型不符
+- `NO_MATCH`：选择器命中 0 个元素
+- `SELECTOR_INVALID`：Page.evaluate 抛错（选择器语法非法）
 
 ## 5. 数据模型
 

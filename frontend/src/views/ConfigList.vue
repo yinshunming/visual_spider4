@@ -3,6 +3,7 @@
     <div class="page-header">
       <h1>配置管理</h1>
       <el-button type="primary" @click="goNew">新建配置</el-button>
+      <el-button @click="goTasks">任务列表</el-button>
     </div>
 
     <el-table :data="store.list.content || []" v-loading="store.loading" stripe>
@@ -17,10 +18,11 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="280">
+      <el-table-column label="操作" width="360">
         <template #default="{ row }">
           <el-button size="small" @click="goEdit(row.id)">编辑</el-button>
           <el-button size="small" type="primary" plain @click="goPreview(row.id)">预览</el-button>
+          <el-button size="small" type="success" @click="onStart(row)">启动爬取</el-button>
           <el-button size="small" type="danger" @click="onDelete(row)">删除</el-button>
         </template>
       </el-table-column>
@@ -65,6 +67,24 @@ function goEdit(id) {
 
 function goPreview(id) {
   router.push(`/configs/${id}/preview`)
+}
+
+function goTasks() {
+  router.push('/tasks')
+}
+
+async function onStart(row) {
+  try {
+    const { createTask } = await import('@/api/tasks')
+    const resp = await createTask(row.id, row.pageType === 'DETAIL_ONLY' ? [] : null)
+    const task = resp.data
+    if (row.pageType === 'DETAIL_ONLY') {
+      ElMessage.info(`DETAIL_ONLY 任务已创建(ID=${task.id}),但需要提供 URLs — 前往任务详情页或使用 API`)
+    }
+    router.push(`/tasks/${task.id}`)
+  } catch (e) {
+    ElMessage.error('启动失败: ' + (e.message || ''))
+  }
 }
 
 async function onDelete(row) {

@@ -26,6 +26,9 @@ public class CrawlConfigService {
         if (config.getStatus() == null) {
             config.setStatus(ConfigStatus.STOPPED);
         }
+        if (config.getStartUrl() != null) {
+            UrlGuard.validate(config.getStartUrl(), "startUrl");
+        }
         return repository.save(config);
     }
 
@@ -59,12 +62,17 @@ public class CrawlConfigService {
     }
 
     @Transactional
-    public CrawlConfig updateWithFields(Long id, String name, com.visualspider.enums.PageType pageType,
+    public CrawlConfig updateWithFields(Long id, String name, String startUrl,
+                                        com.visualspider.enums.PageType pageType,
                                         com.visualspider.enums.SelectorType selectorType,
                                         List<CrawlField> newFields) {
         CrawlConfig config = repository.findById(id)
                 .orElseThrow(() -> new ConfigNotFoundException(id));
         if (name != null) config.setName(name);
+        if (startUrl != null) {
+            UrlGuard.validate(startUrl, "startUrl");
+            config.setStartUrl(startUrl);
+        }
         if (pageType != null) config.setPageType(pageType);
         if (selectorType != null) config.setSelectorType(selectorType);
         // 原子全量替换：清空旧字段，添加新字段

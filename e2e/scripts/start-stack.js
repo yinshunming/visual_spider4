@@ -38,6 +38,45 @@ function killAll() {
       p.kill('SIGTERM')
     } catch (e) {}
   }
+  if (fixtureServer) {
+    try { fixtureServer.close() } catch (e) {}
+  }
+}
+
+let fixtureServer = null
+function startFixtureServer() {
+  const fixtureDir = path.resolve(__dirname, '..', 'fixtures')
+  if (!fs.existsSync(fixtureDir)) {
+    console.error('[fixture] dir not found:', fixtureDir)
+    return
+  }
+  const types = {
+    '.html': 'text/html; charset=utf-8',
+    '.htm': 'text/html; charset=utf-8'
+  }
+  fixtureServer = http.createServer((req, res) => {
+    let urlPath = decodeURIComponent((req.url || '/').split('?')[0])
+    if (urlPath === '/') urlPath = '/sample-list.html'
+    const filePath = path.join(fixtureDir, urlPath)
+    if (!filePath.startsWith(fixtureDir)) {
+      res.statusCode = 403
+      res.end('forbidden')
+      return
+    }
+    fs.readFile(filePath, (err, data) => {
+      if (err) {
+        res.statusCode = 404
+        res.end('not found')
+        return
+      }
+      const ext = path.extname(filePath).toLowerCase()
+      res.setHeader('Content-Type', types[ext] || 'application/octet-stream')
+      res.end(data)
+    })
+  })
+  fixtureServer.listen(7777, '127.0.0.1', () => {
+    console.log('[fixture] listening on 7777')
+  })
 }
 
 process.on('SIGINT', () => { killAll(); process.exit(130) })
@@ -86,15 +125,21 @@ async function main() {
     process.exit(2)
   }
 
-  console.log('[start] backend jar')
-  start('backend', 'java', ['-jar', jarPath])
+  console.log('[start] backend jar (allow-loopback for fixture)')
+  start('backend', 'java', ['-jar', jarPath], {
+    env: { ...process.env, CRAWL_URL_GUARD_ALLOW_LOOPBACK: 'true' }
+  })
 
   console.log('[start] frontend dev')
   start('frontend', 'npm.cmd', ['run', 'dev'], { cwd: path.join(ROOT, 'frontend') })
 
+  console.log('[start] fixture static server on 7777')
+  startFixtureServer()
+
   try {
     await waitForUrl('http://localhost:8080/api/v1/health', 60_000, 'backend')
     await waitForUrl('http://localhost:5173', 30_000, 'frontend')
+    await waitForUrl('http://localhost:7777/sample-list.html', 5_000, 'fixture')
   } catch (e) {
     console.error('[start] stack did not become ready:', e.message)
     console.error('See logs in', LOG_DIR)

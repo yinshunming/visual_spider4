@@ -38,6 +38,7 @@ class CrawlFieldRepositoryTest {
     private CrawlConfig createConfig() {
         CrawlConfig config = new CrawlConfig();
         config.setName("测试配置");
+        config.setStartUrl("https://example.com/test");
         config.setPageType(PageType.LIST_DETAIL);
         config.setSelectorType(SelectorType.CSS);
         config.setStatus(ConfigStatus.STOPPED);

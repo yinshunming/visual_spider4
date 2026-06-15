@@ -12,6 +12,7 @@ import com.visualspider.enums.SelectorType;
 import com.visualspider.repository.CrawlConfigRepository;
 import com.visualspider.service.BrowserSessionService;
 import com.visualspider.service.CrawlFieldService;
+import com.visualspider.service.ExtractionService;
 import com.visualspider.service.SelectorCraftService;
 import com.visualspider.service.SelectorHighlighter;
 import com.visualspider.ws.PageWebSocketHandler;
@@ -60,7 +61,8 @@ class BackendIntegrationTest {
         SelectorCraftService selectorService = new SelectorCraftService();
         SelectorHighlighter highlighter = new SelectorHighlighter(browserService);
         fieldService = mock(CrawlFieldService.class);
-        handler = new PageWebSocketHandler(browserService, selectorService, highlighter, fieldService);
+        ExtractionService extractionService = mock(ExtractionService.class);
+        handler = new PageWebSocketHandler(browserService, selectorService, highlighter, fieldService, extractionService);
         session = mock(WebSocketSession.class);
         when(session.getId()).thenReturn("int-test");
         config = new CrawlConfig();

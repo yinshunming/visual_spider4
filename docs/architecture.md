@@ -54,7 +54,9 @@ com.visualspider/
 │   ├── SelectorCraftService.java     # M2.5 CSS/XPath 候选生成
 │   ├── SelectorHighlighter.java      # M2.5 注入 .vs-highlight + 计数
 │   ├── CssSelectorGenerator.java     # M2.5 自写（替代不可用的第三方库）
-│   └── XPathGenerator.java           # M2.5 Jsoup + 自写 XPath
+│   ├── XPathGenerator.java           # M2.5 Jsoup + 自写 XPath
+│   ├── ExtractionService.java        # M3 批量提取 + 校验 + 字段级四态
+│   └── FieldValueValidator.java      # M3 纯函数类型校验（TEXT/NUMBER/DATE/URL）
 ├── repository/                 # @Repository (Spring Data JPA)
 │   ├── CrawlConfigRepository.java
 │   └── CrawlFieldRepository.java
@@ -184,17 +186,18 @@ frontend/src/
 │   ├── health.js            # 健康检查（历史遗留，WelcomePage 仍在用）
 │   ├── config.js            # config + field CRUD 9 个方法
 │   ├── pageFetch.js         # M2: fetchPage({ url })
-│   └── browser.js           # M2.5: openSession / closeSession / getStatus / connectWs(onMessage)
+│   └── browser.js           # M2.5: openSession / closeSession / getStatus / connectWs(onMessage) + M3: sendPreviewTemplate / onPreviewTemplateResult
 ├── stores/
 │   ├── configStore.js       # useConfigStore: list / current / loading / error + actions
 │   ├── pageFetchStore.js    # M2: usePageFetchStore: status / lastResult / lastError + fetch()
-│   └── browserSessionStore.js  # M2.5: useBrowserSessionStore: status / lastScreenshot / selectors / previewResult / saveFieldResult + loadUrl/click/preview/saveField
+│   ├── browserSessionStore.js  # M2.5: useBrowserSessionStore: status / lastScreenshot / selectors / previewResult / saveFieldResult + loadUrl/click/preview/saveField
+│   └── extractionPreviewStore.js  # M3: useExtractionPreviewStore: results/warnings per pageType + triggerPreview/getResult/getWarnings
 ├── router/
 │   └── index.js             # / → /configs, /configs, /configs/new, /configs/:id, /configs/:id/preview
 └── views/
     ├── ConfigList.vue       # 列表 + 新建/编辑/删除/预览按钮 + 分页
     ├── ConfigEdit.vue       # 新建/编辑双模式 + 字段动态增删 + 打开预览入口
-    └── PagePreview.vue      # M2: URL 输入 + 加载按钮 + loading/success/error 状态区 + 结果展示
+    └── PagePreview.vue      # M2.5 + M3: el-tabs 容器，Tab1=造字段，Tab2=按模板预览
 ```
 
 ### 关键设计决策
@@ -215,6 +218,52 @@ M2+ 计划新增（参考 [openspec/specs/](../openspec/specs/)）：
 | `page-visual-selection`（HTTP 同步加载 MVP 切片） | ✅ M2 完成 | `controller/PageFetchController` + `service/PageFetchService` + `service/UrlGuard` + `config/WebClientConfig` + 前端 `views/PagePreview.vue` + `stores/pageFetchStore.js` |
 | `page-visual-selection`（Playwright + WebSocket 端到端） | ✅ M2.5 完成（`visual-selector-craft` change） | `controller/BrowserSessionController` + `service/BrowserSessionService` + `service/SelectorCraftService` + `service/SelectorHighlighter` + `ws/PageWebSocketHandler` + `config/PlaywrightConfig` + `config/WebSocketConfig` + 前端 `api/browser.js` + `stores/browserSessionStore.js` |
 | `selector-rule-management` | ⬜ 未开始 | 扩展 `CrawlField`，新增 detail_url 必填校验 |
-| `extraction-template` | ⬜ 未开始 | 新增 `service/Extractor.java`，复用 Playwright + Jsoup |
-| `crawl-execution` | ⬜ 未开始 | 新增 `service/CrawlEngine.java`，ThreadPoolExecutor 控制并发 |
+| `extraction-template` | ✅ M3 完成（`implement-extraction-template-preview` change） | 后端 `service/ExtractionService` + `service/FieldValueValidator` + `enums/FieldPreviewStatus` + DTO `FieldPreviewResult` / `ExtractionPreviewResponse` / `PreviewTemplatePayload` / `PreviewTemplateResultPayload` + 改造 `ws/PageWebSocketHandler`；前端 `api/browser.js` 新增 `sendPreviewTemplate` / `onPreviewTemplateResult` + `stores/extractionPreviewStore.js` + `views/PagePreview.vue` 引入 Tab 容器 |
+| `extraction-preview-validation` | ✅ M3 完成 | 字段级四态（OK/TYPE_MISMATCH/NO_MATCH/SELECTOR_INVALID）+ 软警告（detail_url 缺失、空模板）|
+| `crawl-execution` | ⬜ 未开始 | 新增 `service/CrawlEngine.java`，ThreadPoolExecutor 控制并发；直接复用 `ExtractionService` 作为字段提取内核 |
 | `data-persistence` | ⬜ 未开始 | 新增 `list_page` / `list_item` / `article` / `crawl_task` 实体 |
+
+## M3 按模板预览流程
+
+```
+[前端 PagePreview Tab2]
+  用户点击"按当前模板预览"
+        |
+        v
+  extractionPreviewStore.triggerPreview(pageType)
+        |  isLoading=true
+        |  ws.send({type:"previewTemplate", payload:{pageType}})
+        v
+[WS /api/v1/ws/page]
+  PageWebSocketHandler.handlePreviewTemplate
+        |  1. 校验 BrowserSessionService.getPage() != null → 否则 error NO_SESSION
+        |  2. 校验 sessionToConfig.get(sessionId) 非空 → 否则 error BAD_REQUEST
+        |  3. 反序列化 PreviewTemplatePayload
+        v
+  ExtractionService.extractByTemplate(page, configId, pageType)
+        |  ├─ CrawlConfigService.getById(configId) → config
+        |  ├─ 过滤 pageType 字段，按 createdAt ASC 排序
+        |  ├─ 空模板 → warnings += "该模板未定义任何 <pageType> 字段"
+        |  ├─ LIST_DETAIL + LIST + 缺 detail_url → warnings += detail_url 文案
+        |  └─ 对每个字段:
+        |       page.evaluate("(sel) => ...", selector)  // 单脚本批量抽取
+        |       ├─ 抛错 → SELECTOR_INVALID + message
+        |       ├─ 返回 [] → NO_MATCH
+        |       └─ 返回 [v1, v2, ...] → 逐项 FieldValueValidator.validate
+        |           ├─ 任一为 null → TYPE_MISMATCH + message
+        |           └─ 全部合法 → OK
+        v
+  WsMessage<PreviewTemplateResultPayload> 发回前端
+        |
+        v
+[前端 extractionPreviewStore._onMessage]
+  写入 results[pageType] / warnings[pageType]
+  isLoading=false
+  render Table (el-tag 状态徽章 + el-alert 警告横幅)
+```
+
+**关键边界**：
+- `ExtractionService` 设计为 `Page + configId + pageType` 入参 + 纯返回 `ExtractionPreviewResponse`，**不依赖 WebSocket**。M4 `crawl-execution` 阶段在循环里直接调用即可，无需重写
+- `FieldValueValidator` 是无 Spring 依赖的纯函数，可在任何上下文（含脚本工具）独立验证
+- URL 字段优先取 `element.href`（浏览器自动绝对化），非链接元素退回 `textContent`，由 `ExtractionService` 的 page.evaluate 脚本统一处理
+- 单脚本批量抽取（同一 selector 一次 evaluate 拿 N 个值），比"一字段一 evaluate"快 N 倍

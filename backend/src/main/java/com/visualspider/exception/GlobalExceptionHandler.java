@@ -15,6 +15,11 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.BAD_REQUEST, e.getCode(), e.getMessage());
     }
 
+    @ExceptionHandler(StartUrlInvalidException.class)
+    public ResponseEntity<ApiResponse<Void>> handleStartUrlInvalid(StartUrlInvalidException e) {
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, e.getCode(), e.getMessage());
+    }
+
     @ExceptionHandler(BlockedAddressException.class)
     public ResponseEntity<ApiResponse<Void>> handleBlockedAddress(BlockedAddressException e) {
         return buildErrorResponse(HttpStatus.FORBIDDEN, e.getCode(), e.getMessage());
@@ -46,6 +51,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BrowserSessionAlreadyActiveException.class)
     public ResponseEntity<ApiResponse<Void>> handleBrowserSessionAlreadyActive(BrowserSessionAlreadyActiveException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(e.getCode(), e.getMessage()));
+    }
+
+    @ExceptionHandler(TaskAlreadyRunningException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTaskAlreadyRunning(TaskAlreadyRunningException e) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(e.getCode(), e.getMessage()));
     }
 

@@ -57,4 +57,17 @@ describe('api/browser connectWs', () => {
     expect(parsed.payload.url).toBe('https://x.com')
     conn.close()
   })
+
+  it('sendPreviewTemplate(pageType) 发送 type=previewTemplate + payload.pageType', async () => {
+    const onMessage = vi.fn()
+    const conn = connectWs(onMessage)
+    await new Promise(r => setTimeout(r, 10))
+    const { sendPreviewTemplate } = await import('./browser.js')
+    sendPreviewTemplate(conn, 'LIST')
+    expect(conn.ws.sent.length).toBe(1)
+    const parsed = JSON.parse(conn.ws.sent[0])
+    expect(parsed.type).toBe('previewTemplate')
+    expect(parsed.payload.pageType).toBe('LIST')
+    conn.close()
+  })
 })

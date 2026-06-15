@@ -2,6 +2,8 @@ import { createRouter, createWebHistory } from 'vue-router'
 import ConfigList from '../views/ConfigList.vue'
 import ConfigEdit from '../views/ConfigEdit.vue'
 import PagePreview from '../views/PagePreview.vue'
+import TaskList from '../views/TaskList.vue'
+import TaskDetail from '../views/TaskDetail.vue'
 
 const routes = [
   {
@@ -28,6 +30,17 @@ const routes = [
     path: '/configs/:id/preview',
     name: 'config-preview',
     component: PagePreview,
+    props: true
+  },
+  {
+    path: '/tasks',
+    name: 'task-list',
+    component: TaskList
+  },
+  {
+    path: '/tasks/:id',
+    name: 'task-detail',
+    component: TaskDetail,
     props: true
   }
 ]

@@ -2,12 +2,15 @@ package com.visualspider.ws;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.visualspider.dto.request.CreateFieldRequest;
+import com.visualspider.dto.response.ExtractionPreviewResponse;
 import com.visualspider.dto.response.SelectorPairResponse;
 import com.visualspider.dto.ws.ClickPayload;
 import com.visualspider.dto.ws.ErrorPayload;
 import com.visualspider.dto.ws.LoadPagePayload;
 import com.visualspider.dto.ws.PreviewPayload;
 import com.visualspider.dto.ws.PreviewResultPayload;
+import com.visualspider.dto.ws.PreviewTemplatePayload;
+import com.visualspider.dto.ws.PreviewTemplateResultPayload;
 import com.visualspider.dto.ws.SaveFieldPayload;
 import com.visualspider.dto.ws.SaveFieldResultPayload;
 import com.visualspider.dto.ws.ScreenshotPayload;
@@ -17,6 +20,7 @@ import com.visualspider.entity.CrawlField;
 import com.visualspider.exception.BusinessException;
 import com.visualspider.service.BrowserSessionService;
 import com.visualspider.service.CrawlFieldService;
+import com.visualspider.service.ExtractionService;
 import com.visualspider.service.SelectorCraftService;
 import com.visualspider.service.SelectorHighlighter;
 import org.jsoup.Jsoup;
@@ -45,15 +49,18 @@ public class PageWebSocketHandler extends AbstractWebSocketHandler {
     private final SelectorCraftService selectorService;
     private final SelectorHighlighter highlighter;
     private final CrawlFieldService fieldService;
+    private final ExtractionService extractionService;
 
     public PageWebSocketHandler(BrowserSessionService browserService,
                                 SelectorCraftService selectorService,
                                 SelectorHighlighter highlighter,
-                                CrawlFieldService fieldService) {
+                                CrawlFieldService fieldService,
+                                ExtractionService extractionService) {
         this.browserService = browserService;
         this.selectorService = selectorService;
         this.highlighter = highlighter;
         this.fieldService = fieldService;
+        this.extractionService = extractionService;
     }
 
     @Override
@@ -83,13 +90,17 @@ public class PageWebSocketHandler extends AbstractWebSocketHandler {
                 case "click" -> handleClick(session, payload);
                 case "preview" -> handlePreview(session, payload);
                 case "saveField" -> handleSaveField(session, payload);
+                case "previewTemplate" -> handlePreviewTemplate(session, payload);
                 case "close" -> handleClose(session);
                 default -> sendError(session, "UNKNOWN", "未知消息类型: " + type);
             }
         } catch (BusinessException e) {
             sendError(session, mapBusinessCode(e), e.getMessage());
         } catch (Exception e) {
-            sendError(session, "UNKNOWN", e.getMessage());
+            try {
+                sendError(session, "UNKNOWN", e.getMessage());
+            } catch (RuntimeException | IOException ignored) {
+            }
         }
     }
 
@@ -211,6 +222,23 @@ public class PageWebSocketHandler extends AbstractWebSocketHandler {
         send(session, "state", StatePayload.closed());
     }
 
+    private void handlePreviewTemplate(WebSocketSession session, Object payload) throws IOException {
+        var page = browserService.getPage();
+        if (page == null) {
+            sendError(session, "NO_SESSION", "浏览器未就绪");
+            return;
+        }
+        String configIdStr = sessionToConfig.get(session.getId());
+        if (configIdStr == null || configIdStr.isEmpty()) {
+            sendError(session, "BAD_REQUEST", "请先发送 load 消息并携带 configId");
+            return;
+        }
+        PreviewTemplatePayload pt = mapper.convertValue(payload, PreviewTemplatePayload.class);
+        Long configId = Long.valueOf(configIdStr);
+        ExtractionPreviewResponse response = extractionService.extractByTemplate(page, configId, pt.pageType());
+        send(session, "previewTemplateResult", new PreviewTemplateResultPayload(response));
+    }
+
     private void pushScreenshot(WebSocketSession session) throws IOException {
         byte[] bytes = highlighter.screenshotBytes();
         if (bytes == null || bytes.length == 0) {
@@ -221,15 +249,29 @@ public class PageWebSocketHandler extends AbstractWebSocketHandler {
     }
 
     private void send(WebSocketSession session, String type, Object payload) throws IOException {
+        if (!session.isOpen()) {
+            return;
+        }
         WsMessage<Object> msg = new WsMessage<>(type, payload);
         String json = mapper.writeValueAsString(msg);
         synchronized (session) {
-            session.sendMessage(new TextMessage(json));
+            try {
+                session.sendMessage(new TextMessage(json));
+            } catch (IllegalStateException e) {
+                // race: session 在 isOpen 检查与 sendMessage 之间被关闭
+            }
         }
     }
 
     private void sendError(WebSocketSession session, String code, String message) throws IOException {
-        send(session, "error", new ErrorPayload(code, message));
+        if (!session.isOpen()) {
+            return;
+        }
+        try {
+            send(session, "error", new ErrorPayload(code, message));
+        } catch (RuntimeException e) {
+            // session 在 sendMessage 期间被关闭,静默
+        }
     }
 
     private String mapBusinessCode(BusinessException e) {

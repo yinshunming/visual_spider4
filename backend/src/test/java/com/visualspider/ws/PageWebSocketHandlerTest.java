@@ -1,6 +1,7 @@
 package com.visualspider.ws;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.visualspider.dto.response.ExtractionPreviewResponse;
 import com.visualspider.dto.ws.WsMessage;
 import com.visualspider.entity.CrawlConfig;
 import com.visualspider.entity.CrawlField;
@@ -9,6 +10,7 @@ import com.visualspider.enums.FieldType;
 import com.visualspider.exception.BusinessException;
 import com.visualspider.service.BrowserSessionService;
 import com.visualspider.service.CrawlFieldService;
+import com.visualspider.service.ExtractionService;
 import com.visualspider.service.SelectorCraftService;
 import com.visualspider.service.SelectorHighlighter;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,6 +37,7 @@ class PageWebSocketHandlerTest {
     private SelectorCraftService selectorService;
     private SelectorHighlighter highlighter;
     private CrawlFieldService fieldService;
+    private ExtractionService extractionService;
     private PageWebSocketHandler handler;
     private WebSocketSession session;
     private final ObjectMapper mapper = new ObjectMapper();
@@ -45,9 +48,11 @@ class PageWebSocketHandlerTest {
         selectorService = mock(SelectorCraftService.class);
         highlighter = mock(SelectorHighlighter.class);
         fieldService = mock(CrawlFieldService.class);
-        handler = new PageWebSocketHandler(browserService, selectorService, highlighter, fieldService);
+        extractionService = mock(ExtractionService.class);
+        handler = new PageWebSocketHandler(browserService, selectorService, highlighter, fieldService, extractionService);
         session = mock(WebSocketSession.class);
         when(session.getId()).thenReturn("test-session");
+        when(session.isOpen()).thenReturn(true);
     }
 
     @Test
@@ -151,6 +156,53 @@ class PageWebSocketHandlerTest {
         handler.afterConnectionClosed(session, null);
     }
 
+    @Test
+    @DisplayName("previewTemplate + 当前无 Page → 推 error NO_SESSION,不调 ExtractionService")
+    void previewTemplateNoPage() throws Exception {
+        when(browserService.getPage()).thenReturn(null);
+
+        String json = mapper.writeValueAsString(new WsMessage<>(
+                "previewTemplate", java.util.Map.of("pageType", "LIST")));
+        handler.afterConnectionEstablished(session);
+        handler.handleTextMessage(session, new TextMessage(json));
+
+        verify(extractionService, never()).extractByTemplate(any(), any(), any());
+        verify(session, atLeastOnce()).sendMessage(any(TextMessage.class));
+    }
+
+    @Test
+    @DisplayName("previewTemplate + sessionToConfig 空 → 推 error BAD_REQUEST")
+    void previewTemplateNoConfig() throws Exception {
+        com.microsoft.playwright.Page page = mock(com.microsoft.playwright.Page.class);
+        when(browserService.getPage()).thenReturn(page);
+
+        String json = mapper.writeValueAsString(new WsMessage<>(
+                "previewTemplate", java.util.Map.of("pageType", "LIST")));
+        handler.afterConnectionEstablished(session);
+        handler.handleTextMessage(session, new TextMessage(json));
+
+        verify(extractionService, never()).extractByTemplate(any(), any(), any());
+        verify(session, atLeastOnce()).sendMessage(any(TextMessage.class));
+    }
+
+    @Test
+    @DisplayName("previewTemplate + 正常上下文 → 调 ExtractionService 并推 previewTemplateResult")
+    void previewTemplateHappy() throws Exception {
+        com.microsoft.playwright.Page page = mock(com.microsoft.playwright.Page.class);
+        when(browserService.getPage()).thenReturn(page);
+        ExtractionPreviewResponse stub = new ExtractionPreviewResponse(java.util.List.of(), java.util.List.of());
+        when(extractionService.extractByTemplate(eq(page), eq(1L), eq(FieldPageType.LIST))).thenReturn(stub);
+
+        String json = mapper.writeValueAsString(new WsMessage<>(
+                "previewTemplate", java.util.Map.of("pageType", "LIST")));
+        handler.afterConnectionEstablished(session);
+        sessionToConfigHack(1L);
+        handler.handleTextMessage(session, new TextMessage(json));
+
+        verify(extractionService).extractByTemplate(page, 1L, FieldPageType.LIST);
+        verify(session, atLeastOnce()).sendMessage(any(TextMessage.class));
+    }
+
     private void sessionToConfigHack(long configId) throws Exception {
         String json = mapper.writeValueAsString(new WsMessage<>("load", java.util.Map.of("url", "https://example.com", "configId", configId)));
         handler.handleTextMessage(session, new TextMessage(json));
@@ -158,5 +210,32 @@ class PageWebSocketHandlerTest {
 
     private static org.mockito.verification.VerificationMode atLeastOnce() {
         return org.mockito.Mockito.atLeastOnce();
+    }
+
+    @Test
+    @DisplayName("session 已关闭时收到消息:handleTextMessage 不抛 RuntimeException 给 Spring")
+    void closedSessionDoesNotThrow() throws Exception {
+        when(session.isOpen()).thenReturn(false);
+        String json = mapper.writeValueAsString(new WsMessage<>(
+                "previewTemplate", java.util.Map.of("pageType", "LIST")));
+        handler.afterConnectionEstablished(session);
+        handler.handleTextMessage(session, new TextMessage(json));
+        verify(session, never()).sendMessage(any(TextMessage.class));
+    }
+
+    @Test
+    @DisplayName("session 在 sendMessage 期间被关闭(抛 IllegalStateException):外层 try-catch 静默接住,不冒 RuntimeException")
+    void sessionClosedDuringSend() throws Exception {
+        com.microsoft.playwright.Page page = mock(com.microsoft.playwright.Page.class);
+        when(browserService.getPage()).thenReturn(page);
+        when(session.isOpen()).thenReturn(true);
+        org.mockito.Mockito.doThrow(new IllegalStateException("session closed"))
+                .when(session).sendMessage(any(TextMessage.class));
+
+        String json = mapper.writeValueAsString(new WsMessage<>(
+                "previewTemplate", java.util.Map.of("pageType", "LIST")));
+        handler.afterConnectionEstablished(session);
+        sessionToConfigHack(1L);
+        handler.handleTextMessage(session, new TextMessage(json));
     }
 }

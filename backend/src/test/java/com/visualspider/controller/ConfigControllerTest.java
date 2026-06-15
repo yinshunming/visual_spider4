@@ -80,7 +80,7 @@ class ConfigControllerTest {
             when(configService.create(any(CrawlConfig.class))).thenReturn(saved);
 
             String body = objectMapper.writeValueAsString(new CreateConfigRequest(
-                    "新闻爬虫A", PageType.LIST_DETAIL, SelectorType.CSS));
+                    "新闻爬虫A", "https://example.com/list", PageType.LIST_DETAIL, SelectorType.CSS, ConfigStatus.STOPPED));
 
             // When & Then
             mockMvc.perform(post("/api/v1/configs")
@@ -190,10 +190,10 @@ class ConfigControllerTest {
             CrawlConfig updated = buildConfig(1L, "更新后名称");
             updated.setSelectorType(SelectorType.XPATH);
             updated.getFields().add(buildField(10L, "新标题"));
-            when(configService.updateWithFields(eq(1L), any(), any(), any(), any())).thenReturn(updated);
+            when(configService.updateWithFields(eq(1L), any(), any(), any(), any(), any())).thenReturn(updated);
 
             String body = objectMapper.writeValueAsString(new UpdateConfigRequest(
-                    "更新后名称", PageType.LIST_DETAIL, SelectorType.XPATH,
+                    "更新后名称", "https://example.com/list", PageType.LIST_DETAIL, SelectorType.XPATH,
                     List.of(new CreateFieldRequest(FieldPageType.LIST, "新标题", FieldType.TEXT, "h1.new"))));
 
             // When & Then
@@ -213,10 +213,10 @@ class ConfigControllerTest {
         @DisplayName("fields[] 携带新字段列表，service.updateWithFields 收到的字段数与请求一致")
         void update_passesAllFieldsToService() throws Exception {
             // Given
-            when(configService.updateWithFields(eq(1L), any(), any(), any(), any()))
+            when(configService.updateWithFields(eq(1L), any(), any(), any(), any(), any()))
                     .thenAnswer(inv -> {
                         @SuppressWarnings("unchecked")
-                        List<CrawlField> fields = (List<CrawlField>) inv.getArgument(4);
+                        List<CrawlField> fields = (List<CrawlField>) inv.getArgument(5);
                         // 模拟 service 的副作用：返回的 config 带这些 fields
                         CrawlConfig cfg = buildConfig(1L, "x");
                         cfg.getFields().addAll(fields);
@@ -224,7 +224,7 @@ class ConfigControllerTest {
                     });
 
             String body = objectMapper.writeValueAsString(new UpdateConfigRequest(
-                    "name", PageType.LIST_DETAIL, SelectorType.CSS,
+                    "name", "https://example.com/list", PageType.LIST_DETAIL, SelectorType.CSS,
                     List.of(
                             new CreateFieldRequest(FieldPageType.LIST, "f1", FieldType.TEXT, "h1"),
                             new CreateFieldRequest(FieldPageType.DETAIL, "f2", FieldType.URL, ".url"),
@@ -240,7 +240,7 @@ class ConfigControllerTest {
 
             // 验证 service 收到的字段参数正确
             ArgumentCaptor<List<CrawlField>> captor = ArgumentCaptor.forClass(List.class);
-            verify(configService).updateWithFields(eq(1L), any(), any(), any(), captor.capture());
+            verify(configService).updateWithFields(eq(1L), any(), any(), any(), any(), captor.capture());
             assertThat(captor.getValue()).hasSize(3);
             assertThat(captor.getValue()).extracting(CrawlField::getFieldName)
                     .containsExactly("f1", "f2", "f3");
@@ -250,14 +250,14 @@ class ConfigControllerTest {
         @DisplayName("fields[] 为空数组表示清空所有字段（service 收到空列表）")
         void update_emptyFieldsArray_clearsAllFields() throws Exception {
             // Given
-            when(configService.updateWithFields(eq(1L), any(), any(), any(), any()))
+            when(configService.updateWithFields(eq(1L), any(), any(), any(), any(), any()))
                     .thenAnswer(inv -> {
                         CrawlConfig cfg = buildConfig(1L, "x");
                         return cfg;
                     });
 
             String body = objectMapper.writeValueAsString(new UpdateConfigRequest(
-                    "name", PageType.LIST_DETAIL, SelectorType.CSS, List.of()));
+                    "name", "https://example.com/list", PageType.LIST_DETAIL, SelectorType.CSS, List.of()));
 
             // When & Then
             mockMvc.perform(put("/api/v1/configs/1")
@@ -267,7 +267,7 @@ class ConfigControllerTest {
                     .andExpect(jsonPath("$.data.fields.length()").value(0));
 
             ArgumentCaptor<List<CrawlField>> captor = ArgumentCaptor.forClass(List.class);
-            verify(configService).updateWithFields(eq(1L), any(), any(), any(), captor.capture());
+            verify(configService).updateWithFields(eq(1L), any(), any(), any(), any(), captor.capture());
             assertThat(captor.getValue()).isEmpty();
         }
 
@@ -275,11 +275,11 @@ class ConfigControllerTest {
         @DisplayName("不存在的 id 返回 200 + ApiResponse.error(code=404)")
         void update_notFound_returns404InEnvelope() throws Exception {
             // Given
-            when(configService.updateWithFields(eq(99L), any(), any(), any(), any()))
+            when(configService.updateWithFields(eq(99L), any(), any(), any(), any(), any()))
                     .thenThrow(new ConfigNotFoundException(99L));
 
             String body = objectMapper.writeValueAsString(new UpdateConfigRequest(
-                    "x", PageType.LIST_DETAIL, SelectorType.CSS, List.of()));
+                    "x", "https://example.com/list", PageType.LIST_DETAIL, SelectorType.CSS, List.of()));
 
             // When & Then
             mockMvc.perform(put("/api/v1/configs/99")

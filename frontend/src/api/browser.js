@@ -51,4 +51,17 @@ export function connectWs(onMessage) {
   }
 }
 
+export function sendPreviewTemplate(conn, pageType) {
+  if (!conn) return
+  conn.send({ type: 'previewTemplate', payload: { pageType } })
+}
+
+export function onPreviewTemplateResult(callback) {
+  return connectWs((msg) => {
+    if (msg && msg.type === 'previewTemplateResult') {
+      callback(msg.payload)
+    }
+  })
+}
+
 export default apiClient

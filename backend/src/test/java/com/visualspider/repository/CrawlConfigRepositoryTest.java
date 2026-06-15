@@ -36,6 +36,7 @@ class CrawlConfigRepositoryTest {
     private CrawlConfig buildConfig(String name) {
         CrawlConfig config = new CrawlConfig();
         config.setName(name);
+        config.setStartUrl("https://example.com/" + name);
         config.setPageType(PageType.LIST_DETAIL);
         config.setSelectorType(SelectorType.CSS);
         config.setStatus(ConfigStatus.STOPPED);

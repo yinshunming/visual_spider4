@@ -36,6 +36,7 @@ public class ConfigController {
     public ApiResponse<ConfigResponse> create(@RequestBody CreateConfigRequest request) {
         CrawlConfig input = new CrawlConfig();
         input.setName(request.name());
+        input.setStartUrl(request.startUrl());
         input.setPageType(request.pageType());
         input.setSelectorType(request.selectorType());
         CrawlConfig saved = configService.create(input);
@@ -60,7 +61,7 @@ public class ConfigController {
         List<CrawlField> fields = request.fields() == null ? List.of()
                 : request.fields().stream().map(this::toField).toList();
         CrawlConfig updated = configService.updateWithFields(
-                id, request.name(), request.pageType(), request.selectorType(), fields);
+                id, request.name(), request.startUrl(), request.pageType(), request.selectorType(), fields);
         return ApiResponse.success(ConfigResponse.from(updated));
     }
 

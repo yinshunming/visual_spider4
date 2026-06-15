@@ -105,20 +105,15 @@ public class BrowserSessionService {
             throw new NavigationException("浏览器会话未打开");
         }
         try {
-            if (page == null) {
-                context = browser.newContext(new Browser.NewContextOptions()
-                        .setViewportSize(viewportWidth, viewportHeight)
-                        .setDeviceScaleFactor(deviceScaleFactor));
-                page = context.newPage();
-                page.setDefaultNavigationTimeout(navigationTimeoutMs);
-                page.addStyleTag(new Page.AddStyleTagOptions().setContent(HIGHLIGHT_STYLE));
-            } else {
-                Page old = page;
-                page = context.newPage();
-                page.setDefaultNavigationTimeout(navigationTimeoutMs);
-                page.addStyleTag(new Page.AddStyleTagOptions().setContent(HIGHLIGHT_STYLE));
-                try { old.close(); } catch (Exception ignored) {}
+            if (context != null) {
+                try { context.close(); } catch (Exception ignored) {}
             }
+            context = browser.newContext(new Browser.NewContextOptions()
+                    .setViewportSize(viewportWidth, viewportHeight)
+                    .setDeviceScaleFactor(deviceScaleFactor));
+            page = context.newPage();
+            page.setDefaultNavigationTimeout(navigationTimeoutMs);
+            page.addStyleTag(new Page.AddStyleTagOptions().setContent(HIGHLIGHT_STYLE));
             page.navigate(url);
             page.waitForLoadState(com.microsoft.playwright.options.LoadState.NETWORKIDLE);
             currentUrl = url;
