@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import * as articlesApi from '@/api/articles'
+import * as articlesApi from '../api/articles'
 
 export const useArticleStore = defineStore('article', {
   state: () => ({
@@ -10,6 +10,7 @@ export const useArticleStore = defineStore('article', {
     total: 0,
     keyword: '',
     configId: null,
+    taskId: null,
     isLoading: false,
     error: null
   }),
@@ -19,6 +20,7 @@ export const useArticleStore = defineStore('article', {
       this.isLoading = true
       try {
         const resp = await articlesApi.listArticles({
+          taskId: this.taskId,
           configId: this.configId,
           keyword: this.keyword,
           page: this.page,

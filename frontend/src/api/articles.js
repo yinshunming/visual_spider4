@@ -16,11 +16,13 @@ apiClient.interceptors.response.use(
 
 /**
  * 分页文章列表。
+ * - taskId 可选(优先按任务过滤)
  * - configId 可选(不传 → 全部)
  * - keyword 可选(走 JSON 文本 LIKE)
  */
-export function listArticles({ configId, keyword, page = 0, size = 20 } = {}) {
+export function listArticles({ taskId, configId, keyword, page = 0, size = 20 } = {}) {
   const params = { page, size }
+  if (taskId != null) params.task_id = taskId
   if (configId != null) params.config_id = configId
   if (keyword) params.keyword = keyword
   return apiClient.get('/articles', { params }).then(r => r.data)

@@ -24,10 +24,11 @@ public class ArticleController {
     }
 
     @GetMapping
-    public ApiResponse<Page<ArticleSummary>> list(@RequestParam(name = "config_id", required = false) Long configId,
+    public ApiResponse<Page<ArticleSummary>> list(@RequestParam(name = "task_id", required = false) Long taskId,
+                                                  @RequestParam(name = "config_id", required = false) Long configId,
                                                   @RequestParam(required = false) String keyword,
                                                   Pageable pageable) {
-        Page<Article> page = queryService.listArticles(configId, keyword, pageable);
+        Page<Article> page = queryService.listArticles(taskId, configId, keyword, pageable);
         return ApiResponse.success(page.map(ArticleSummary::from));
     }
 

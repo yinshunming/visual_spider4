@@ -13,6 +13,8 @@ public interface ArticleRepository extends JpaRepository<Article, Long> {
 
     Page<Article> findByConfigId(Long configId, Pageable pageable);
 
+    Page<Article> findByTaskId(Long taskId, Pageable pageable);
+
     /**
      * 在 custom_fields JSON 文本上做 LIKE 关键词搜索(大小写敏感)。
      * 注:这是 PG JSON-as-TEXT 的简化做法;M5 可替换为 jsonb 索引 + lower。

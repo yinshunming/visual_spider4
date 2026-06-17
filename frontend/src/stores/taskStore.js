@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import * as tasksApi from '@/api/tasks'
+import * as tasksApi from '../api/tasks'
 
 const POLL_INTERVAL_MS = 1500
 const RUNNING_STATUS = 'RUNNING'
@@ -8,6 +8,7 @@ export const useTaskStore = defineStore('task', {
   state: () => ({
     current: null,
     list: [],
+    total: 0,
     isLoading: false,
     error: null,
     _pollTimer: null
@@ -70,8 +71,10 @@ export const useTaskStore = defineStore('task', {
       this.isLoading = true
       try {
         const resp = await tasksApi.listTasks({ configId, page, size })
-        this.list = resp.data
-        return resp.data
+        const pageData = resp.data || {}
+        this.list = pageData.content || []
+        this.total = pageData.totalElements || 0
+        return this.list
       } catch (e) {
         this.error = e.message
         throw e

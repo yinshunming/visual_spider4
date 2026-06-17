@@ -25,7 +25,7 @@
         <template #default="{ row }">
           <el-progress
             :percentage="progressOf(row)"
-            :status="row.status === 'FAILED' ? 'exception' : ''"
+            :status="progressStatusOf(row)"
           />
         </template>
       </el-table-column>
@@ -49,7 +49,7 @@
     <el-pagination
       v-model:current-page="page"
       :page-size="size"
-      :total="taskStore.list.length"
+      :total="taskStore.total"
       layout="prev, pager, next"
       @current-change="refresh"
     />
@@ -59,7 +59,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useTaskStore } from '@/stores/taskStore'
+import { useTaskStore } from '../stores/taskStore'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const router = useRouter()
@@ -73,8 +73,17 @@ function statusTagType(status) {
 }
 
 function progressOf(row) {
-  if (!row.totalItems) return 0
+  if (!row.totalItems) {
+    // 无条目:已完成显示满进度,其余显示 0
+    return row.status === 'COMPLETED' ? 100 : 0
+  }
   return Math.round(((row.crawledItems + row.failedItems) / row.totalItems) * 100)
+}
+
+function progressStatusOf(row) {
+  if (row.status === 'FAILED') return 'exception'
+  if (row.status === 'COMPLETED') return 'success'
+  return ''
 }
 
 function formatTime(s) {

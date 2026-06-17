@@ -21,6 +21,7 @@
 
 <script setup>
 import { ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 
 const props = defineProps({
   modelValue: Boolean
@@ -44,6 +45,7 @@ function parseUrls() {
 function onSubmit() {
   const urls = parseUrls()
   if (urls.length === 0) {
+    ElMessage.warning('请至少输入一个 URL')
     return
   }
   emit('submit', urls)

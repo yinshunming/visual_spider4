@@ -9,6 +9,9 @@
       <el-form-item label="名称" required>
         <el-input v-model="form.name" placeholder="输入配置名称" />
       </el-form-item>
+      <el-form-item label="起始 URL" required>
+        <el-input v-model="form.startUrl" placeholder="例如 https://example.com/list" />
+      </el-form-item>
       <el-form-item label="页面类型" required>
         <el-select v-model="form.pageType" placeholder="选择页面类型" style="width: 100%">
           <el-option label="列表+详情 (LIST_DETAIL)" value="LIST_DETAIL" />
@@ -82,6 +85,7 @@ const isEdit = computed(() => !!route.params.id)
 
 const form = reactive({
   name: '',
+  startUrl: '',
   pageType: null,
   selectorType: null,
   fields: []
@@ -92,6 +96,7 @@ onMounted(async () => {
     await store.fetchConfigById(route.params.id)
     if (store.current) {
       form.name = store.current.name
+      form.startUrl = store.current.startUrl || ''
       form.pageType = store.current.pageType
       form.selectorType = store.current.selectorType
       form.fields = (store.current.fields || []).map(f => ({ ...f }))
@@ -117,12 +122,13 @@ function goPreview() {
 }
 
 async function onSave() {
-  if (!form.name || !form.pageType || !form.selectorType) {
-    ElMessage.warning('请填写名称、页面类型和选择器')
+  if (!form.name || !form.startUrl || !form.pageType || !form.selectorType) {
+    ElMessage.warning('请填写名称、起始 URL、页面类型和选择器')
     return
   }
   const payload = {
     name: form.name,
+    startUrl: form.startUrl,
     pageType: form.pageType,
     selectorType: form.selectorType,
     fields: form.fields.map(f => ({

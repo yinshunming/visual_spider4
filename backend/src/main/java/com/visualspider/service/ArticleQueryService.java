@@ -43,7 +43,10 @@ public class ArticleQueryService {
     }
 
     @Transactional(readOnly = true)
-    public Page<Article> listArticles(Long configId, String keyword, Pageable pageable) {
+    public Page<Article> listArticles(Long taskId, Long configId, String keyword, Pageable pageable) {
+        if (taskId != null) {
+            return articleRepository.findByTaskId(taskId, pageable);
+        }
         if (configId == null) {
             return articleRepository.findAll(pageable);
         }
@@ -80,7 +83,7 @@ public class ArticleQueryService {
     public Set<String> aggregateCustomFieldKeys(Long configId, String keyword) {
         // 仅取最新 200 条做键聚合(导出场景下足够代表列集合)
         Pageable head = PageRequest.of(0, 200, Sort.by(Sort.Direction.DESC, "fetchedAt"));
-        Page<Article> top = listArticles(configId, keyword, head);
+        Page<Article> top = listArticles(null, configId, keyword, head);
         Set<String> keys = new LinkedHashSet<>();
         for (Article a : top) {
             if (a.getCustomFields() != null) {
@@ -97,7 +100,7 @@ public class ArticleQueryService {
     public List<Map<String, String>> exportJson(Long configId, String keyword) {
         Set<String> keys = aggregateCustomFieldKeys(configId, keyword);
         Pageable all = PageRequest.of(0, Integer.MAX_VALUE);
-        Page<Article> page = listArticles(configId, keyword, all);
+        Page<Article> page = listArticles(null, configId, keyword, all);
         List<Map<String, String>> rows = new java.util.ArrayList<>();
         for (Article a : page) {
             Map<String, String> row = new LinkedHashMap<>();

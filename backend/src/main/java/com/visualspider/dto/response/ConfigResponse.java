@@ -11,6 +11,7 @@ import java.util.List;
 public record ConfigResponse(
         Long id,
         String name,
+        String startUrl,
         PageType pageType,
         SelectorType selectorType,
         ConfigStatus status,
@@ -25,6 +26,7 @@ public record ConfigResponse(
         return new ConfigResponse(
                 config.getId(),
                 config.getName(),
+                config.getStartUrl(),
                 config.getPageType(),
                 config.getSelectorType(),
                 config.getStatus(),

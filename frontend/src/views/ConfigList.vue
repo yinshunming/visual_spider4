@@ -37,6 +37,12 @@
         @current-change="loadConfigs"
       />
     </div>
+
+    <StartCrawlDialog
+      v-model="crawlDialogVisible"
+      @submit="onCrawlSubmit"
+      @cancel="crawlDialogVisible = false"
+    />
   </div>
 </template>
 
@@ -45,11 +51,14 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useConfigStore } from '../stores/configStore'
+import StartCrawlDialog from './StartCrawlDialog.vue'
 
 const router = useRouter()
 const store = useConfigStore()
 const page = ref(0)
 const size = ref(10)
+const crawlDialogVisible = ref(false)
+const pendingCrawlRow = ref(null)
 
 onMounted(() => loadConfigs())
 
@@ -74,13 +83,30 @@ function goTasks() {
 }
 
 async function onStart(row) {
+  // DETAIL_ONLY 必须先提供要爬的详情 URL,弹框收集
+  if (row.pageType === 'DETAIL_ONLY') {
+    pendingCrawlRow.value = row
+    crawlDialogVisible.value = true
+    return
+  }
+  // LIST_DETAIL:爬取从 startUrl 解析列表页,无需手动给 URL
+  await launchTask(row.id, null)
+}
+
+async function onCrawlSubmit(urls) {
+  const row = pendingCrawlRow.value
+  crawlDialogVisible.value = false
+  pendingCrawlRow.value = null
+  if (!row) return
+  await launchTask(row.id, urls)
+}
+
+async function launchTask(configId, urls) {
   try {
-    const { createTask } = await import('@/api/tasks')
-    const resp = await createTask(row.id, row.pageType === 'DETAIL_ONLY' ? [] : null)
+    const { createTask } = await import('../api/tasks')
+    const resp = await createTask(configId, urls)
     const task = resp.data
-    if (row.pageType === 'DETAIL_ONLY') {
-      ElMessage.info(`DETAIL_ONLY 任务已创建(ID=${task.id}),但需要提供 URLs — 前往任务详情页或使用 API`)
-    }
+    ElMessage.success(`任务已创建(ID=${task.id})`)
     router.push(`/tasks/${task.id}`)
   } catch (e) {
     ElMessage.error('启动失败: ' + (e.message || ''))
