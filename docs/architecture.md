@@ -39,7 +39,9 @@ com.visualspider/
 │   ├── FieldController.java    # /api/v1/configs/{id}/fields + /api/v1/fields/{id}
 │   ├── HealthController.java   # /api/v1/health
 │   ├── PageFetchController.java        # /api/v1/page-fetch（M2 同步页面元信息抓取）
-│   └── BrowserSessionController.java   # /api/v1/browser/sessions（M2.5 单例 Playwright 会话）
+│   ├── BrowserSessionController.java   # /api/v1/browser/sessions（M2.5 单例 Playwright 会话）
+│   ├── TaskController.java             # M4: /api/v1/tasks CRUD + stop
+│   └── ArticleController.java          # M4: /api/v1/articles 分页/详情/导出
 ├── config/
 │   ├── WebClientConfig.java    # HttpClient Bean（连接超时 8s，HTTP/1.1）
 │   ├── PlaywrightConfig.java   # M2.5 Playwright.create() Bean，失败降级为 null
@@ -49,37 +51,55 @@ com.visualspider/
 │   ├── CrawlFieldService.java
 │   ├── HealthService.java
 │   ├── PageFetchService.java   # M2 同步抓取：UrlGuard + httpClient + 大小限制
-│   ├── UrlGuard.java           # M2 协议白名单 + 回环目标拦截
+│   ├── UrlGuard.java           # M2 协议白名单 + 回环目标拦截（M4 也校验 crawl_config.startUrl）
 │   ├── BrowserSessionService.java    # M2.5 Playwright 单会话生命周期
 │   ├── SelectorCraftService.java     # M2.5 CSS/XPath 候选生成
 │   ├── SelectorHighlighter.java      # M2.5 注入 .vs-highlight + 计数
 │   ├── CssSelectorGenerator.java     # M2.5 自写（替代不可用的第三方库）
 │   ├── XPathGenerator.java           # M2.5 Jsoup + 自写 XPath
-│   ├── ExtractionService.java        # M3 批量提取 + 校验 + 字段级四态
-│   └── FieldValueValidator.java      # M3 纯函数类型校验（TEXT/NUMBER/DATE/URL）
+│   ├── ExtractionService.java        # M3 批量提取 + 校验 + 字段级四态（M4 CrawlEngine 复用）
+│   ├── FieldValueValidator.java      # M3 纯函数类型校验（TEXT/NUMBER/DATE/URL）
+│   ├── CrawlEngine.java              # M4 进程内单任务锁 + LIST_DETAIL / DETAIL_ONLY 双流程调度
+│   ├── CrawlTaskService.java         # M4 任务生命周期：createTask(DETAIL_ONLY urls→detail_url 落库) + stop
+│   ├── ArticleQueryService.java      # M4 按 taskId / configId + keyword 查询 + 列集合聚合 + 导出
+│   └── ZombieTaskCleanerRunner.java  # M4 启动时把 RUNNING 任务批量标 FAILED("服务重启,任务中断")
 ├── repository/                 # @Repository (Spring Data JPA)
 │   ├── CrawlConfigRepository.java
-│   └── CrawlFieldRepository.java
+│   ├── CrawlFieldRepository.java
+│   ├── CrawlTaskRepository.java       # M4
+│   ├── ListPageRepository.java        # M4
+│   ├── ListItemRepository.java        # M4
+│   ├── ArticleRepository.java         # M4（findByTaskId / findByConfigIdAndKeyword）
+│   └── DetailUrlRepository.java       # M4
 ├── entity/                     # @Entity
-│   ├── CrawlConfig.java        # @OneToMany CrawlField (cascade ALL)
-│   └── CrawlField.java         # @ManyToOne CrawlConfig
+│   ├── CrawlConfig.java        # M1 @OneToMany CrawlField (cascade ALL)；M4 增加 startUrl 字段（NOT NULL,UrlGuard 校验）
+│   ├── CrawlField.java         # @ManyToOne CrawlConfig
+│   ├── CrawlTask.java          # M4（@ManyToOne CrawlConfig；含 total/crawled/failed + 状态枚举）
+│   ├── ListPage.java           # M4（@ManyToOne CrawlTask；raw_html 留待 M5 重新解析）
+│   ├── ListItem.java           # M4（@ManyToOne ListPage；含 detail_url 字段，状态 + error_message）
+│   ├── Article.java            # M4（@ManyToOne CrawlTask + CrawlConfig；listItemId 与 detailUrlId 二选一；custom_fields JSON）
+│   └── DetailUrl.java          # M4（@ManyToOne CrawlTask；DETAIL_ONLY 任务的 URL 队列）
 ├── dto/
 │   ├── ApiResponse.java        # {code, data, message} 统一包络
 │   ├── HealthResponse.java
 │   ├── request/
-│   │   ├── CreateConfigRequest.java
+│   │   ├── CreateConfigRequest.java            # M4 起含 startUrl（@NotBlank）
 │   │   ├── CreateFieldRequest.java
-│   │   ├── UpdateConfigRequest.java            # 含 fields[] 列表
+│   │   ├── UpdateConfigRequest.java            # M4 起含 startUrl
 │   │   ├── PageFetchRequest.java               # M2: { url: string }
-│   │   └── OpenBrowserSessionRequest.java      # M2.5 显式空 record
+│   │   ├── OpenBrowserSessionRequest.java      # M2.5 显式空 record
+│   │   └── CreateTaskRequest.java              # M4: { configId, urls }
 │   ├── response/
-│   │   ├── ConfigResponse.java                 # 含 fields
+│   │   ├── ConfigResponse.java                 # M4 起含 startUrl
 │   │   ├── FieldResponse.java
 │   │   ├── PageFetchResponse.java              # M2: { status, finalUrl, title, contentLength, fetchedAt }
 │   │   ├── BrowserSessionResponse.java         # M2.5 { sessionId, status, currentUrl, createdAt }
 │   │   ├── SelectorCandidate.java              # M2.5 { selector, matchCount, samples }
-│   │   └── SelectorPairResponse.java           # M2.5 { css, xpath }
-│   └── ws/                                     # M2.5 WebSocket 消息 DTO
+│   │   ├── SelectorPairResponse.java           # M2.5 { css, xpath }
+│   │   ├── TaskResponse.java                   # M4 { id, configId, pageType, status, total/crawled/failed, started/completed, errorMessage }
+│   │   ├── ArticleSummary.java                 # M4 { id, configId, url, status, customFields, errorMessage, fetchedAt }
+│   │   └── ArticleDetail.java                  # M4 = ArticleSummary + raw_html 完整内容
+│   └── ws/                                     # M2.5 + M3 WebSocket 消息 DTO
 │       ├── WsMessage.java                      # 通用信封 { type, payload }
 │       ├── LoadPagePayload.java                # { url, configId }
 │       ├── ClickPayload.java                   # { x, y }
@@ -89,6 +109,8 @@ com.visualspider/
 │       ├── StatePayload.java                   # { state: LOADED|ERROR|CLOSED, message }
 │       ├── PreviewResultPayload.java           # { matchCount, samples }
 │       ├── SaveFieldResultPayload.java         # { ok, fieldId, message }
+│       ├── PreviewTemplatePayload.java         # M3: { pageType: LIST|DETAIL }
+│       ├── PreviewTemplateResultPayload.java   # M3: { result: { fields: [...], warnings: [...] } }
 │       └── ErrorPayload.java                   # { code, message }
 ├── enums/
 │   ├── PageType.java           # LIST_DETAIL, DETAIL_ONLY
@@ -97,20 +119,27 @@ com.visualspider/
 │   ├── ConfigStatus.java       # ACTIVE, STOPPED（默认 STOPPED）
 │   ├── FieldPageType.java      # LIST, DETAIL（字段属于哪个页面）
 │   ├── PageFetchStatus.java    # M2: LOADING, SUCCESS, FAILED
-│   └── BrowserSessionStatus.java  # M2.5 ACTIVE, CLOSED
+│   ├── BrowserSessionStatus.java  # M2.5 ACTIVE, CLOSED
+│   ├── TaskStatus.java         # M4: PENDING, RUNNING, COMPLETED, FAILED
+│   ├── ItemStatus.java         # M4: list_item / article 通用 PENDING|CRAWLED|FAILED
+│   └── DetailUrlStatus.java    # M4: DETAIL_ONLY detail_url PENDING|CRAWLED|FAILED
 ├── exception/
 │   ├── BusinessException.java           # 基类，code + message
 │   ├── ConfigNotFoundException.java     # 404 语义
 │   ├── InvalidUrlException.java         # M2: code=4001
-│   ├── BlockedAddressException.java     # M2: code=4003
+│   ├── BlockedAddressException.java     # M2: code=4003（同时被 M4 startUrl 校验复用）
 │   ├── FetchTimeoutException.java       # M2: code=4004
 │   ├── FetchFailedException.java        # M2: code=4002/4005
 │   ├── BrowserSessionAlreadyActiveException.java  # M2.5 code=409
 │   ├── BrowserSessionNotFoundException.java      # M2.5 code=404
 │   ├── NavigationException.java                  # M2.5 code=4006
+│   ├── StartUrlInvalidException.java             # M4 code=4007（startUrl 缺失/格式/回环）
+│   ├── TaskAlreadyRunningException.java          # M4 code=4090（全局 RUNNING 锁被占）
+│   ├── TaskNotFoundException.java                # M4 code=404
+│   ├── ArticleNotFoundException.java             # M4 code=404
 │   └── GlobalExceptionHandler.java      # @RestControllerAdvice → ApiResponse
-└── ws/                                     # M2.5 WebSocket 端点
-    └── PageWebSocketHandler.java          # 处理 load/click/preview/saveField/close 五种消息
+└── ws/                                     # M2.5 + M3 WebSocket 端点
+    └── PageWebSocketHandler.java          # 处理 load/click/preview/saveField/close/previewTemplate 六种消息
 ```
 
 ### 数据模型
@@ -120,8 +149,9 @@ com.visualspider/
 crawl_config (
   id              BIGSERIAL PRIMARY KEY,
   name            VARCHAR NOT NULL,
-  page_type       VARCHAR(20) NOT NULL,  -- LIST_DETAIL | DETAIL_ONLY
-  selector_type   VARCHAR(20) NOT NULL,  -- CSS | XPATH
+  start_url       VARCHAR(2048) NOT NULL,  -- M4：爬取起始 URL（UrlGuard 校验 http(s) + 非回环）
+  page_type       VARCHAR(20) NOT NULL,    -- LIST_DETAIL | DETAIL_ONLY
+  selector_type   VARCHAR(20) NOT NULL,    -- CSS | XPATH
   status          VARCHAR(20) NOT NULL DEFAULT 'STOPPED',
   created_at      TIMESTAMP NOT NULL,
   updated_at      TIMESTAMP NOT NULL
@@ -137,9 +167,64 @@ crawl_field (
   created_at    TIMESTAMP NOT NULL,
   updated_at    TIMESTAMP NOT NULL
 );
+
+-- M4 五张表（已建，由 ddl-auto: update 自动建/改）
+
+crawl_task (
+  id              BIGSERIAL PRIMARY KEY,
+  config_id       BIGINT NOT NULL REFERENCES crawl_config(id) ON DELETE CASCADE,
+  page_type       VARCHAR(20) NOT NULL,         -- 与 config.page_type 一致
+  status          VARCHAR(20) NOT NULL DEFAULT 'RUNNING',  -- PENDING|RUNNING|COMPLETED|FAILED
+  total_items     INT NOT NULL DEFAULT 0,
+  crawled_items   INT NOT NULL DEFAULT 0,
+  failed_items    INT NOT NULL DEFAULT 0,
+  started_at      TIMESTAMP NOT NULL,
+  completed_at    TIMESTAMP,
+  error_message   TEXT
+);
+
+list_page (    -- 每个访问的列表页一条；M5 用于重解析
+  id          BIGSERIAL PRIMARY KEY,
+  task_id     BIGINT NOT NULL REFERENCES crawl_task(id) ON DELETE CASCADE,
+  config_id   BIGINT NOT NULL REFERENCES crawl_config(id) ON DELETE CASCADE,
+  url         VARCHAR(2048) NOT NULL,
+  raw_html    TEXT NOT NULL,                  -- 完整 HTML，留 M5 重新解析
+  fetched_at  TIMESTAMP NOT NULL
+);
+
+list_item (   -- 列表页解析出的每个列表项
+  id            BIGSERIAL PRIMARY KEY,
+  list_page_id  BIGINT NOT NULL REFERENCES list_page(id) ON DELETE CASCADE,
+  detail_url    VARCHAR(2048) NOT NULL,
+  status        VARCHAR(20) NOT NULL,        -- PENDING|CRAWLED|FAILED
+  error_message TEXT
+);
+
+article (     -- 每个访问的详情页一条；custom_fields JSON
+  id              BIGSERIAL PRIMARY KEY,
+  config_id       BIGINT NOT NULL REFERENCES crawl_config(id) ON DELETE CASCADE,
+  task_id         BIGINT NOT NULL REFERENCES crawl_task(id) ON DELETE CASCADE,
+  list_item_id    BIGINT REFERENCES list_item(id),     -- LIST_DETAIL 模式必填
+  detail_url_id   BIGINT REFERENCES detail_url(id),    -- DETAIL_ONLY 模式必填
+  url             VARCHAR(2048) NOT NULL,
+  raw_html        TEXT NOT NULL,
+  custom_fields   TEXT NOT NULL DEFAULT '{}',         -- JSON 文本，M5 可换 jsonb
+  status          VARCHAR(20) NOT NULL,               -- PENDING|CRAWLED|FAILED
+  error_message   TEXT,
+  fetched_at      TIMESTAMP NOT NULL
+);
+
+detail_url (  -- DETAIL_ONLY 模式用户提供的 URL；详情抽取前每 URL 一条 PENDING
+  id            BIGSERIAL PRIMARY KEY,
+  task_id       BIGINT NOT NULL REFERENCES crawl_task(id) ON DELETE CASCADE,
+  url           VARCHAR(2048) NOT NULL,
+  status        VARCHAR(20) NOT NULL DEFAULT 'PENDING',  -- PENDING|CRAWLED|FAILED
+  error_message TEXT
+);
 ```
 
-> M2+ 还将新增：`crawl_task`、`list_page`、`list_item`、`article`、`detail_url`（参考 [openspec/specs/data-persistence/spec.md](../openspec/specs/data-persistence/spec.md)）。
+> 级联关系：`DELETE /api/v1/configs/{id}` 通过 JPA cascade 清 `crawl_field` + 任务下全部爬取产物。`DELETE /api/v1/tasks/{id}` 清该任务下 `list_page` / `list_item` / `article` / `detail_url`。
+> 数据流与设计取舍的完整真相源：[openspec/specs/crawl-execution/spec.md](../openspec/specs/crawl-execution/spec.md) 与 [openspec/specs/data-persistence/spec.md](../openspec/specs/data-persistence/spec.md)。
 
 ### 关键设计决策
 
@@ -151,6 +236,9 @@ crawl_field (
 | JPA `@OneToMany` + `orphanRemoval=true` | 删除配置时级联清理字段 |
 | `ApiResponse` 统一包络 | 前端无需为每条响应解析不同形状；HTTP 状态码统一为 200 |
 | 状态默认 `STOPPED` | 新建配置不会自动启动爬取 |
+| `crawl_config.start_url` M4 起必填（UrlGuard 校验） | LIST_DETAIL 入口页 / DETAIL_ONLY 默认详情页源；DETAIL_ONLY 任务实际 URL 仍由创建任务时提供的 `urls[]` 决定 |
+| `CrawlEngine` 进程内单任务锁 | MVP 不引入 Redis/JVM 级锁；单机够用且实现简单（AtomicReference + AtomicBoolean） |
+| DETAIL_ONLY 任务凭 `urls[]` 落 `detail_url` 记录（M4） | 任务可暂停后用同 URL 集合重跑，便于重试；与 LIST_DETAIL 流程解耦 |
 
 ## 前端架构
 
@@ -186,18 +274,26 @@ frontend/src/
 │   ├── health.js            # 健康检查（历史遗留，WelcomePage 仍在用）
 │   ├── config.js            # config + field CRUD 9 个方法
 │   ├── pageFetch.js         # M2: fetchPage({ url })
-│   └── browser.js           # M2.5: openSession / closeSession / getStatus / connectWs(onMessage) + M3: sendPreviewTemplate / onPreviewTemplateResult
+│   ├── browser.js           # M2.5: openSession / closeSession / getStatus / connectWs(onMessage) + M3: sendPreviewTemplate / onPreviewTemplateResult
+│   ├── tasks.js             # M4: listTasks / getTask / createTask / stopTask / deleteTask
+│   └── articles.js          # M4: listArticles (支持 taskId 优先) / getArticle / exportArticles
 ├── stores/
 │   ├── configStore.js       # useConfigStore: list / current / loading / error + actions
 │   ├── pageFetchStore.js    # M2: usePageFetchStore: status / lastResult / lastError + fetch()
 │   ├── browserSessionStore.js  # M2.5: useBrowserSessionStore: status / lastScreenshot / selectors / previewResult / saveFieldResult + loadUrl/click/preview/saveField
-│   └── extractionPreviewStore.js  # M3: useExtractionPreviewStore: results/warnings per pageType + triggerPreview/getResult/getWarnings
+│   ├── extractionPreviewStore.js  # M3: useExtractionPreviewStore: results/warnings per pageType + triggerPreview/getResult/getWarnings
+│   ├── taskStore.js         # M4: useTaskStore: list / total / current / isLoading / _pollTimer + fetchList / startPolling / createAndPoll
+│   └── articleStore.js      # M4: useArticleStore: list / total / taskId / configId + fetchList / fetchOne / exportFile
 ├── router/
-│   └── index.js             # / → /configs, /configs, /configs/new, /configs/:id, /configs/:id/preview
+│   └── index.js             # / → /configs, /configs, /configs/new, /configs/:id, /configs/:id/preview, /tasks, /tasks/:id
 └── views/
-    ├── ConfigList.vue       # 列表 + 新建/编辑/删除/预览按钮 + 分页
-    ├── ConfigEdit.vue       # 新建/编辑双模式 + 字段动态增删 + 打开预览入口
-    └── PagePreview.vue      # M2.5 + M3: el-tabs 容器，Tab1=造字段，Tab2=按模板预览
+    ├── ConfigList.vue       # 列表 + 新建/编辑/删除/预览/启动爬取按钮 + 分页（DETAIL_ONLY 启动弹框）
+    ├── ConfigEdit.vue       # 新建/编辑双模式 + startUrl 输入 + 字段动态增删 + 打开预览入口
+    ├── PagePreview.vue      # M2.5 + M3: el-tabs 容器，Tab1=造字段，Tab2=按模板预览
+    ├── WelcomePage.vue      # 首页（重定向入口 + 健康检查）
+    ├── TaskList.vue         # M4: 任务分页 + configId 过滤 + 进度展示（COMPLETED 显示 100% + success）
+    ├── TaskDetail.vue       # M4: 任务状态 + 进度 + 该任务的爬取条目（按 taskId 拉 articles）
+    └── StartCrawlDialog.vue # M4: DETAIL_ONLY 启动爬取弹框（每行一个 URL，空列表拒绝）
 ```
 
 ### 关键设计决策
@@ -220,8 +316,8 @@ M2+ 计划新增（参考 [openspec/specs/](../openspec/specs/)）：
 | `selector-rule-management` | ⬜ 未开始 | 扩展 `CrawlField`，新增 detail_url 必填校验 |
 | `extraction-template` | ✅ M3 完成（`implement-extraction-template-preview` change） | 后端 `service/ExtractionService` + `service/FieldValueValidator` + `enums/FieldPreviewStatus` + DTO `FieldPreviewResult` / `ExtractionPreviewResponse` / `PreviewTemplatePayload` / `PreviewTemplateResultPayload` + 改造 `ws/PageWebSocketHandler`；前端 `api/browser.js` 新增 `sendPreviewTemplate` / `onPreviewTemplateResult` + `stores/extractionPreviewStore.js` + `views/PagePreview.vue` 引入 Tab 容器 |
 | `extraction-preview-validation` | ✅ M3 完成 | 字段级四态（OK/TYPE_MISMATCH/NO_MATCH/SELECTOR_INVALID）+ 软警告（detail_url 缺失、空模板）|
-| `crawl-execution` | ⬜ 未开始 | 新增 `service/CrawlEngine.java`，ThreadPoolExecutor 控制并发；直接复用 `ExtractionService` 作为字段提取内核 |
-| `data-persistence` | ⬜ 未开始 | 新增 `list_page` / `list_item` / `article` / `crawl_task` 实体 |
+| `crawl-execution` | ✅ M4 完成（`implement-manual-crawl-execution` change） | 后端 `service/CrawlEngine`（进程内单任务锁 AtomicReference + AtomicBoolean stopFlag） + `service/CrawlTaskService` + `service/ZombieTaskCleanerRunner` + 5 张新表 + 3 个新枚举；前端 `api/tasks.js` + `stores/taskStore` + `views/TaskList` / `TaskDetail` / `StartCrawlDialog`；DETAIL_ONLY 弹框收 URL；全局 4090 错误码 |
+| `data-persistence` | ✅ M4 完成 | 5 张表（`crawl_task` / `list_page` / `list_item` / `article` / `detail_url`）+ `service/ArticleQueryService`（按 taskId/configId + keyword 查询、列集合聚合、JSON/xlsx 导出）+ `controller/ArticleController` + `controller/TaskController`；前端 `api/articles.js` + `stores/articleStore` |
 
 ## M3 按模板预览流程
 

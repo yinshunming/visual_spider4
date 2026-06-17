@@ -5,10 +5,12 @@
 | 里程碑 | 状态 |
 |--------|------|
 | M0 开发环境 | ✅ 完成 |
-| M1 项目管理 | ✅ 完成 |
+| M1 项目管理（配置 CRUD + 字段子资源） | ✅ 完成 |
 | M2 页面可视化（HTTP 同步切片） | ✅ 完成 |
 | M2.5 页面可视化（Playwright + WebSocket 端到端） | ✅ 完成 |
-| 选择器/抽取/爬取 | ⬜ 未开始 |
+| M3 按模板预览（字段级四态校验） | ✅ 完成 |
+| M4 手工爬取执行（任务/数据浏览） | ✅ 完成 |
+| M5 raw_html 重新解析 / 增量爬取 / 定时 | ⬜ 未开始 |
 
 详见 [AGENTS.md](AGENTS.md) §3 与 [openspec/specs/](openspec/specs/)。测试统计见 [docs/tdd-guide.md](docs/tdd-guide.md) §测试统计。
 
@@ -104,23 +106,27 @@ visual_spider4/
 │   │   ├── Application.java
 │   │   ├── config/          # WebClientConfig / PlaywrightConfig / WebSocketConfig
 │   │   ├── controller/      # Config / Field / Health / PageFetch / BrowserSession
+│   │   │                    # M4: TaskController / ArticleController
 │   │   ├── service/         # Config / Field / Health / PageFetch / UrlGuard /
 │   │   │                    # BrowserSession / SelectorCraft / SelectorHighlighter /
-│   │   │                    # CssSelectorGenerator / XPathGenerator
-│   │   ├── repository/      # JPA 仓库
-│   │   ├── entity/          # JPA 实体
+│   │   │                    # CssSelectorGenerator / XPathGenerator /
+│   │   │                    # M3: ExtractionService / FieldValueValidator /
+│   │   │                    # M4: CrawlEngine / CrawlTaskService / ArticleQueryService / ZombieTaskCleanerRunner
+│   │   ├── repository/      # JPA 仓库（含 M4：Task/ListPage/ListItem/Article/DetailUrl）
+│   │   ├── entity/          # JPA 实体（M4：新增 5 张表对应实体）
 │   │   ├── dto/             # request/ response/ ws/ 三类
-│   │   ├── enums/           # 含 BrowserSessionStatus
-│   │   ├── exception/       # 含 BrowserSession* / NavigationException
+│   │   ├── enums/           # 含 BrowserSessionStatus；M4：TaskStatus / ItemStatus / DetailUrlStatus
+│   │   ├── exception/       # 含 BrowserSession* / NavigationException；M4：TaskAlreadyRunning / StartUrlInvalid / ArticleNotFound
 │   │   └── ws/              # PageWebSocketHandler
-│   ├── src/test/            # 101 个测试
+│   ├── src/test/            # 101+ 个测试（含 M4：CrawlEngine / CrawlTaskService / ArticleController）
 │   └── pom.xml
 ├── frontend/                # Vue 3 + Vite + Element Plus + Pinia
 │   ├── src/
-│   │   ├── api/             # Axios 封装（index/health/config/pageFetch/browser）
-│   │   ├── stores/          # Pinia store（configStore/pageFetchStore/browserSessionStore）
-│   │   ├── views/           # ConfigList / ConfigEdit / PagePreview
-│   │   ├── router/          # vue-router 配置
+│   │   ├── api/             # Axios 封装（index/health/config/pageFetch/browser/M4:tasks/articles）
+│   │   ├── stores/          # Pinia store（configStore/pageFetchStore/browserSessionStore/extractionPreviewStore/M4:taskStore/articleStore）
+│   │   ├── views/           # ConfigList / ConfigEdit / PagePreview / WelcomePage /
+│   │   │                    # M4: TaskList / TaskDetail / StartCrawlDialog
+│   │   ├── router/          # vue-router 配置（含 /tasks, /tasks/:id）
 │   │   ├── App.vue
 │   │   └── main.js
 │   ├── vite.config.js
@@ -156,15 +162,33 @@ visual_spider4/
 { "code": 404, "data": null, "message": "CrawlConfig not found: id=99" }
 ```
 
-### 配置（M1 已实现）
+### 配置（M1 + startUrl 必填）
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/v1/configs` | 分页查询（参数 `page`、`size`） |
-| POST | `/api/v1/configs` | 创建配置（status 默认 STOPPED） |
-| GET | `/api/v1/configs/{id}` | 获取详情（带字段） |
-| PUT | `/api/v1/configs/{id}` | 更新配置（`fields[]` 全量替换） |
-| DELETE | `/api/v1/configs/{id}` | 删除配置（级联删除字段） |
+| POST | `/api/v1/configs` | 创建配置（`name` / `startUrl` / `pageType` / `selectorType` 必填，`startUrl` 经 UrlGuard 校验；status 默认 STOPPED） |
+| GET | `/api/v1/configs/{id}` | 获取详情（带字段，含 `startUrl`） |
+| PUT | `/api/v1/configs/{id}` | 更新配置（`fields[]` 全量替换；M4 起 PUT 也需 `startUrl`） |
+| DELETE | `/api/v1/configs/{id}` | 删除配置（级联删除字段 + M4 任务的全部爬取产物） |
+
+### 爬取任务（M4）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/v1/tasks` | 创建任务（`{configId, urls}`；DETAIL_ONLY 必传非空 `urls[]`，LIST_DETAIL 传 `null`） |
+| GET | `/api/v1/tasks` | 任务列表（`?config_id=&page=&size=`，按 `started_at DESC`） |
+| GET | `/api/v1/tasks/{id}` | 任务详情（含 `totalItems` / `crawledItems` / `failedItems`） |
+| POST | `/api/v1/tasks/{id}/stop` | 优雅停止（status 仍为 COMPLETED） |
+| DELETE | `/api/v1/tasks/{id}` | 级联删除任务 + 全部 list_page / list_item / article / detail_url |
+
+### 爬取条目（M4）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/v1/articles` | 分页条目（`?task_id=` 优先 / `&config_id=&keyword=&page=&size=`） |
+| GET | `/api/v1/articles/{id}` | 条目详情（含 `raw_html` + `custom_fields`） |
+| POST | `/api/v1/articles/export?format=JSON\|xlsx` | 按当前过滤条件导出 |
 
 ### 字段（子资源，M1 已实现）
 

@@ -99,7 +99,7 @@ mvn spring-boot:run
 
 ```bash
 cd backend
-mvn test                                   # 跑所有 70 项测试（UrlGuard 12 + PageFetchService 6 + PageFetchController 8 + M1 既有 44）
+mvn test                                   # 跑所有测试（详见 docs/tdd-guide.md §当前测试统计；M1 44 + M2 26 + M2.5 31 + M4 ~50+）
 mvn test -Dtest=PageFetchServiceTest       # 单跑某类
 mvn test -Dtest='*ServiceTest'             # 按通配符
 ```
@@ -165,13 +165,22 @@ curl http://localhost:8080/api/v1/health
 # 2. 前端起来后，浏览器打开
 open http://localhost:5173
 
-# 3. 创建配置
+# 3. 创建配置（M4 起 startUrl 必填）
 curl -X POST http://localhost:8080/api/v1/configs \
   -H "Content-Type: application/json" \
-  -d '{"name":"测试","pageType":"LIST_DETAIL","selectorType":"CSS"}'
+  -d '{"name":"测试","startUrl":"https://example.com/list","pageType":"LIST_DETAIL","selectorType":"CSS"}'
 
 # 4. 列出
 curl http://localhost:8080/api/v1/configs
+
+# 5. M4 创建任务（LIST_DETAIL）
+curl -X POST http://localhost:8080/api/v1/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"configId":1,"urls":null}'
+
+# 6. M4 查看任务与该任务下的 article
+curl http://localhost:8080/api/v1/tasks/1
+curl 'http://localhost:8080/api/v1/articles?task_id=1&page=0&size=20'
 ```
 
 ## Agent 协作契约

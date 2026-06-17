@@ -27,40 +27,40 @@ visual_spider4/
 │   ├── src/main/java/com/visualspider/
 │   │   ├── Application.java
 │   │   ├── config/                   # WebClientConfig（M2） / PlaywrightConfig（M2.5）/ WebSocketConfig（M2.5）
-│   │   ├── controller/               # Config / Field / Health / PageFetch（M2）/ BrowserSession（M2.5）
-│   │   ├── service/                  # CrawlConfig / CrawlField / Health / PageFetch（M2）/ UrlGuard（M2） / BrowserSession（M2.5） / SelectorCraft / SelectorHighlighter（M2.5）/ CssSelectorGenerator / XPathGenerator（M2.5 自写，替代不可用的第三方库）
-│   │   ├── repository/               # JPA 仓库
-│   │   ├── entity/                   # CrawlConfig / CrawlField
+│   │   ├── controller/               # Config / Field / Health / PageFetch（M2）/ BrowserSession（M2.5）/ Task（M4）/ Article（M4）
+│   │   ├── service/                  # CrawlConfig / CrawlField / Health / PageFetch（M2）/ UrlGuard（M2） / BrowserSession（M2.5） / SelectorCraft / SelectorHighlighter（M2.5）/ CssSelectorGenerator / XPathGenerator（M2.5 自写） / ExtractionService（M3）/ FieldValueValidator（M3） / CrawlEngine（M4 进程内单任务锁）/ CrawlTaskService（M4）/ ArticleQueryService（M4）/ ZombieTaskCleanerRunner（M4 启动清理）
+│   │   ├── repository/               # JPA 仓库（含 M4：TaskRepository / ListPage / ListItem / Article / DetailUrl）
+│   │   ├── entity/                   # CrawlConfig / CrawlField（M1）+ M4：CrawlTask / ListPage / ListItem / Article / DetailUrl
 │   │   ├── dto/
-│   │   │   ├── request/              # CreateConfig / CreateField / UpdateConfig / PageFetchRequest（M2）/ OpenBrowserSessionRequest（M2.5）
-│   │   │   ├── response/             # ConfigResponse / FieldResponse / PageFetchResponse（M2）/ BrowserSessionResponse（M2.5）/ SelectorCandidate（M2.5）/ SelectorPairResponse（M2.5）
-│   │   │   └── ws/                   # M2.5 WsMessage + 9 个 payload record
-│   │   ├── enums/                    # PageType / SelectorType / FieldType / ConfigStatus / FieldPageType / PageFetchStatus（M2）/ BrowserSessionStatus（M2.5）
-│   │   ├── exception/                # BusinessException / ConfigNotFound / InvalidUrl（M2）/ BlockedAddress（M2）/ FetchTimeout（M2）/ FetchFailed（M2）/ BrowserSessionAlreadyActive + NotFound + Navigation（M2.5）
-│   │   └── ws/                       # M2.5 PageWebSocketHandler（处理 load/click/preview/saveField/close）
-│   ├── src/test/                     # 101 个测试（Repository 7 / Service ~40 / Controller ~30 / 集成 1）
+│   │   │   ├── request/              # CreateConfig（含 startUrl @NotBlank） / CreateField / UpdateConfig / PageFetchRequest（M2）/ OpenBrowserSessionRequest（M2.5）/ CreateTaskRequest（M4）
+│   │   │   ├── response/             # ConfigResponse（含 startUrl） / FieldResponse / PageFetchResponse（M2）/ BrowserSessionResponse（M2.5）/ SelectorCandidate（M2.5）/ SelectorPairResponse（M2.5）/ TaskResponse（M4）/ ArticleSummary + ArticleDetail（M4）
+│   │   │   └── ws/                   # M2.5 WsMessage + 9 个 payload record（M3 新增 previewTemplate/Result）
+│   │   ├── enums/                    # PageType / SelectorType / FieldType / ConfigStatus / FieldPageType / PageFetchStatus（M2）/ BrowserSessionStatus（M2.5）/ M4：TaskStatus / ItemStatus / DetailUrlStatus
+│   │   ├── exception/                # BusinessException / ConfigNotFound / InvalidUrl / BlockedAddress / FetchTimeout / FetchFailed / BrowserSession* / Navigation / M4：TaskAlreadyRunning（code=4090）/ StartUrlInvalid（code=4007）/ ArticleNotFound
+│   │   └── ws/                       # M2.5 PageWebSocketHandler（处理 load/click/preview/saveField/close/previewTemplate）
+│   ├── src/test/                     # 101 个测试（M1 44 + M2 26 + M2.5 31）+ M4：CrawlEngine / CrawlTaskService / ArticleController 等（详见 docs/tdd-guide.md §当前测试统计）
 │   ├── src/test/resources/mockito-extensions/  # mock-maker-inline（mock final Playwright）
 │   ├── src/main/resources/application.yml
 │   ├── src/test/resources/application-test.yml
 │   └── pom.xml
 ├── frontend/                         # Vue 3 + Vite + Element Plus + Pinia
 │   └── src/
-│       ├── api/                      # index / health / config / pageFetch（M2）/ browser（M2.5，含 WS 客户端）
-│       ├── stores/                   # configStore / pageFetchStore（M2）/ browserSessionStore（M2.5）
-│       ├── views/                    # ConfigList / ConfigEdit / PagePreview（M2，已改造为 M2.5 全链路）
-│       ├── router/index.js           # /, /configs, /configs/new, /configs/:id, /configs/:id/preview
+│       ├── api/                      # index / health / config / pageFetch（M2）/ browser（M2.5，含 WS 客户端）/ M4：tasks.js / articles.js
+│       ├── stores/                   # configStore / pageFetchStore（M2）/ browserSessionStore（M2.5）/ extractionPreviewStore（M3）/ M4：taskStore / articleStore
+│       ├── views/                    # ConfigList / ConfigEdit / PagePreview（M2.5 + M3 Tab2）/ WelcomePage / M4：TaskList / TaskDetail / StartCrawlDialog
+│       ├── router/index.js           # /, /configs, /configs/new, /configs/:id, /configs/:id/preview, /tasks, /tasks/:id
 │       ├── App.vue / main.js
 │       └── vitest.config.js
-├── e2e/                              # E2E 集成测试（@playwright/test，Chromium）
+├── e2e/                              # E2E 集成测试（@playwright/test，Chromium）— 仅 PagePreview 全链路
 │   ├── package.json
 │   ├── playwright.config.js
 │   ├── scripts/start-stack.js        # 后台拉 jar + vite dev，跑测试，关进程
 │   ├── tests/page-preview.spec.js   # 真 Chromium 跑 PagePreview 全链路
 │   └── README.md
 ├── openspec/
-│   ├── specs/                        # 9 个能力真相源
+│   ├── specs/                        # 9 个能力真相源（`openspec validate --specs` 9/9 通过）
 │   └── changes/
-│       └── archive/                  # 已归档（最新：2026-06-11-visual-selector-craft）
+│       └── archive/                  # 已归档（最新：2026-06-15-implement-manual-crawl-execution）
 ├── docs/                             # 深入文档（架构、API、运维、TDD）
 ├── AGENTS.md                         # 本文件
 └── README.md                         # 入门与运行
@@ -113,7 +113,8 @@ pg_isready -h localhost -p 5432       # 验证 PG 可达
 **M1 范围**：配置 CRUD + 字段 CRUD（作为配置子资源）+ 全量更新字段替换 + 前端列表/编辑页。
 **M2**：`POST /api/v1/page-fetch` 同步抓取目标页面元信息（title / finalUrl / contentLength），前端 `/configs/:id/preview` 页面。归档 [openspec/changes/archive/2026-06-09-implement-page-loading/](openspec/changes/archive/2026-06-09-implement-page-loading/)。
 **M2.5**（visual-selector-craft change）:Playwright 单会话 + WebSocket `/api/v1/ws/page` 端到端（URL 加载 → 截图帧推送 → 视口坐标点击 → CSS/XPath 候选生成 → 候选面板 → 匹配预览高亮 → 字段落库）。归档 [openspec/changes/archive/2026-06-11-visual-selector-craft/](openspec/changes/archive/2026-06-11-visual-selector-craft/)。测试与踩坑见 [docs/tdd-guide.md](docs/tdd-guide.md) §测试统计 与 [e2e/README.md](e2e/README.md) §端到端踩坑。
-**M3**（implement-extraction-template-preview change）:在 M2.5 同一 `/configs/:id/preview` 页面加 Tab2"按模板预览"。后端 `ExtractionService` 在已加载的 Playwright Page 上对某 pageType（LIST/DETAIL）批量执行选择器，经 `FieldValueValidator` 类型校验后返回字段级四态（OK/TYPE_MISMATCH/NO_MATCH/SELECTOR_INVALID），通过 WS 消息 `previewTemplate` / `previewTemplateResult` 同步返回。`ExtractionService` 与 WS 协议解耦，供 M4 爬取执行直接复用。归档目录待用户确认。
+**M3**（implement-extraction-template-preview change）:在 M2.5 同一 `/configs/:id/preview` 页面加 Tab2"按模板预览"。后端 `ExtractionService` 在已加载的 Playwright Page 上对某 pageType（LIST/DETAIL）批量执行选择器，经 `FieldValueValidator` 类型校验后返回字段级四态（OK/TYPE_MISMATCH/NO_MATCH/SELECTOR_INVALID），通过 WS 消息 `previewTemplate` / `previewTemplateResult` 同步返回。`ExtractionService` 与 WS 协议解耦，供 M4 爬取执行直接复用。归档 [openspec/changes/archive/2026-06-14-implement-extraction-template-preview/](openspec/changes/archive/2026-06-14-implement-extraction-template-preview/)。
+**M4**（implement-manual-crawl-execution change）:手工爬取执行。`CrawlEngine` 进程内单任务锁（全局同时只允许 1 个 RUNNING），`POST /api/v1/tasks` 创建任务（DETAIL_ONLY 必传 `urls[]`，每条建 `detail_url` 记录；LIST_DETAIL 从 `config.start_url` 解析），`CrawlEngine.runDetailOnly` / `runListDetail` 复用 M3 `ExtractionService` 抽取并落 `article.custom_fields`。`ZombieTaskCleanerRunner` 启动时把 RUNNING 标 FAILED。前端 `TaskList` 看任务列表 + 进度；`TaskDetail` 看单任务 + 该任务爬取条目（`GET /articles?task_id=` 优先过滤）；`StartCrawlDialog` 收 DETAIL_ONLY 的 URL 列表。错误码 4007 (StartUrlInvalid) / 4090 (TaskAlreadyRunning)。归档 [openspec/changes/archive/2026-06-15-implement-manual-crawl-execution/](openspec/changes/archive/2026-06-15-implement-manual-crawl-execution/)。
 
 ## 4. 路由速查
 
@@ -137,13 +138,23 @@ POST   /browser/sessions         M2.5 打开 Playwright 会话（单例，重复
 DELETE /browser/sessions/{id}   M2.5 关闭会话
 GET    /browser/sessions         M2.5 查询当前会话状态
 WS     /ws/page                  M2.5 + M3 WebSocket 端点（load/click/preview/saveField/previewTemplate/close 六类消息）
+POST   /tasks                    M4 创建任务（DETAIL_ONLY 必传 urls[]；LIST_DETAIL 传 null）
+GET    /tasks                    M4 任务列表（?config_id=&page=&size=）
+GET    /tasks/{id}               M4 任务详情（含 total/crawled/failed 进度）
+POST   /tasks/{id}/stop          M4 优雅停止（status 仍为 COMPLETED）
+DELETE /tasks/{id}               M4 级联删除 task + 全部 list_page/list_item/article/detail_url
+GET    /articles                 M4 爬取条目分页（?task_id= 优先 / &config_id=&keyword=&page=&size=）
+GET    /articles/{id}            M4 文章详情（含 raw_html + custom_fields）
+POST   /articles/export          M4 导出 JSON / xlsx（按当前过滤条件）
 
 前端路由：
 /                            -> /configs 重定向
-/configs                     ConfigList（列表 + 新建/编辑/删除/预览）
-/configs/new                 ConfigEdit 新建模式
+/configs                     ConfigList（列表 + 新建/编辑/删除/预览/启动爬取）
+/configs/new                 ConfigEdit 新建模式（含 startUrl 必填输入框）
 /configs/{id}                ConfigEdit 编辑模式
 /configs/{id}/preview        PagePreview（M2.5 全链路：URL 加载 → 截图 → 候选 → 预览 → 保存字段）
+/tasks                       TaskList（分页任务列表 + configId 过滤）
+/tasks/{id}                  TaskDetail（任务状态 + 进度 + 该任务的爬取条目 + 停止/删除）
 ```
 
 详细 API 文档见 [docs/api-guide.md](docs/api-guide.md)。
@@ -165,9 +176,9 @@ WS     /ws/page                  M2.5 + M3 WebSocket 端点（load/click/preview
 
 ```
 crawl_config
-  id, name, page_type (LIST_DETAIL|DETAIL_ONLY),
-  selector_type (CSS|XPATH), status (ACTIVE|STOPPED, default STOPPED),
-  created_at, updated_at
+  id, name, start_url (NOT NULL, UrlGuard 校验 http(s) + 非回环),
+  page_type (LIST_DETAIL|DETAIL_ONLY), selector_type (CSS|XPATH),
+  status (ACTIVE|STOPPED, default STOPPED), created_at, updated_at
 
 crawl_field（作为 crawl_config 的子资源，FK config_id）
   id, config_id, page_type (LIST|DETAIL), field_name, field_type (TEXT|NUMBER|DATE|URL),
@@ -175,6 +186,29 @@ crawl_field（作为 crawl_config 的子资源，FK config_id）
 
 关系：CrawlConfig @OneToMany CrawlField，CascadeType.ALL + orphanRemoval=true
 删除配置时自动级联删除所有字段。
+
+# M4 五张表（详见 [openspec/specs/data-persistence/spec.md](openspec/specs/data-persistence/spec.md)）
+
+crawl_task
+  id, config_id (FK), page_type, status (PENDING|RUNNING|COMPLETED|FAILED),
+  total_items, crawled_items, failed_items,
+  started_at, completed_at, error_message
+
+list_page（每个访问的列表页一条；M5 用于重解析）
+  id, task_id, config_id, url, raw_html, fetched_at
+
+list_item（列表页解析出的每个列表项）
+  id, list_page_id, detail_url, status, error_message
+
+article（每个访问的详情页一条；custom_fields JSON）
+  id, config_id, task_id, list_item_id? | detail_url_id?,
+  url, raw_html, custom_fields, status, error_message, fetched_at
+
+detail_url（DETAIL_ONLY 模式用户提供的 URL；详情抽取前每 URL 一条 PENDING）
+  id, task_id, url, status (PENDING|CRAWLED|FAILED), error_message
+
+# 任务级联：DELETE /tasks/{id} → 自动清理该任务下全部 list_page / list_item / article / detail_url
+# 配置级联：DELETE /configs/{id} → JPA cascade 清 crawl_field + 任务下所有爬取产物
 ```
 
 ## 6. 代码风格（核心约定）

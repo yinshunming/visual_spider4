@@ -57,12 +57,13 @@
 
 ### POST /api/v1/configs
 
-创建配置。`status` 不传时默认 `STOPPED`。
+创建配置。`name` / `startUrl` / `pageType` / `selectorType` 必填（`startUrl` M4 起强制）；`status` 不传时默认 `STOPPED`。`startUrl` 经 UrlGuard 校验：协议必须 `http(s)`，host 不能为 `localhost` / `127.0.0.1` / `::1`；违反返回 `code=4007`。
 
 **Request body**：
 ```json
 {
   "name": "新闻爬虫A",
+  "startUrl": "https://example.com/list",
   "pageType": "LIST_DETAIL",
   "selectorType": "CSS"
 }
@@ -70,15 +71,21 @@
 
 **Response**：HTTP 201，body 为 `ApiResponse<ConfigResponse>`
 
+**错误**：
+- `code=4007, message="startUrl 不能为空"` — 缺失 `startUrl`
+- `code=4007, message="目标地址被禁止访问（回环）"` — `startUrl` 指向回环
+- `code=4007, message="URL 格式不合法"` — 协议非 http(s) 或非合法 URI
+
 ### GET /api/v1/configs/{id}
 
-获取配置详情（包含 `fields` 列表，按 `createdAt ASC` 排序）。
+获取配置详情（包含 `fields` 列表，按 `createdAt ASC` 排序）。**M4 起响应含 `startUrl`**。
 
 **Response `data`**：
 ```json
 {
   "id": 1,
   "name": "新闻爬虫A",
+  "startUrl": "https://example.com/list",
   "pageType": "LIST_DETAIL",
   "selectorType": "CSS",
   "status": "STOPPED",
@@ -102,12 +109,13 @@
 
 ### PUT /api/v1/configs/{id}
 
-更新配置 + 全量替换字段列表。
+更新配置 + 全量替换字段列表。**M4 起 PUT 也需传 `startUrl`**（与 POST 同样经 UrlGuard 校验，缺失或非法返回 `code=4007`）。
 
 **Request body**：
 ```json
 {
   "name": "新闻爬虫A (更新)",
+  "startUrl": "https://example.com/list",
   "pageType": "LIST_DETAIL",
   "selectorType": "XPATH",
   "fields": [
@@ -213,6 +221,8 @@
 | 4003 | 403 | 目标地址被禁止访问 | URL host 为 `localhost` / `127.0.0.1` / `::1` |
 | 4004 | 504 | 加载超时 | 抓取超过 `page-fetch.timeout`（默认 8s） |
 | 4005 | 502 | 响应体过大 | 响应体超过 `page-fetch.max-size`（默认 2MB） |
+| 4007 | 200 | startUrl 校验失败 | POST/PUT `/api/v1/configs` 时 `startUrl` 缺失 / 协议非 http(s) / 指向回环 |
+| 4090 | 200 | 同时已有 RUNNING 任务 | POST `/api/v1/tasks` 时全局锁被占（CrawlEngine 进程内单任务锁） |
 
 > **注意**：M1 既有接口（configs / fields）所有响应仍然 HTTP 200 + body code 区分；M2 引入的 `/api/v1/page-fetch` 走 HTTP 状态码 + body code 双层语义，方便前端按 HTTP 分类做粗粒度处理、按 code 做精确文案提示。
 
@@ -462,4 +472,152 @@ curl http://localhost:8080/api/v1/browser/sessions
 
 # 关闭浏览器会话
 curl -X DELETE http://localhost:8080/api/v1/browser/sessions/<sessionId>
+
+# 创建爬取任务（DETAIL_ONLY,带 URLs）
+curl -X POST http://localhost:8080/api/v1/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"configId":3,"urls":["https://example.com/article/1","https://example.com/article/2"]}'
+
+# 创建爬取任务（LIST_DETAIL）
+curl -X POST http://localhost:8080/api/v1/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"configId":1,"urls":null}'
+
+# 任务列表
+curl 'http://localhost:8080/api/v1/tasks?page=0&size=20'
+
+# 任务详情
+curl http://localhost:8080/api/v1/tasks/1
+
+# 优雅停止任务
+curl -X POST http://localhost:8080/api/v1/tasks/1/stop
+
+# 删除任务（级联清理爬取产物）
+curl -X DELETE http://localhost:8080/api/v1/tasks/1
+
+# 按任务查 article 列表
+curl 'http://localhost:8080/api/v1/articles?task_id=1&page=0&size=20'
+
+# 按 config 查 article 列表（带关键词）
+curl 'http://localhost:8080/api/v1/articles?config_id=1&keyword=warrior&page=0&size=20'
+
+# 文章详情
+curl http://localhost:8080/api/v1/articles/1
+
+# 导出 JSON
+curl -X POST 'http://localhost:8080/api/v1/articles/export?format=JSON&config_id=1' \
+  -H "Content-Type: application/json" --data '{}'
 ```
+
+## 爬取任务（M4）
+
+### POST /api/v1/tasks
+
+创建爬取任务。`configId` 必填；`urls` 行为按 `pageType` 区分：
+
+- **DETAIL_ONLY**：`urls` 必填且非空数组。系统为每个 URL 创建一条 `detail_url`（PENDING），任务启动后 `CrawlEngine.runDetailOnly` 逐个 `page.goto` + 抽取。
+- **LIST_DETAIL**：`urls` 传 `null`。系统从 `config.startUrl` 解析列表页，抽取列表项后逐项 `page.goto(detail_url)`。
+
+**Request body**：
+
+```json
+{ "configId": 3, "urls": ["https://example.com/article/1"] }
+```
+
+```json
+{ "configId": 1, "urls": null }
+```
+
+**Response `data`**：HTTP 201，`TaskResponse`
+
+```json
+{
+  "id": 1,
+  "configId": 3,
+  "pageType": "DETAIL_ONLY",
+  "status": "RUNNING",
+  "totalItems": 1,
+  "crawledItems": 0,
+  "failedItems": 0,
+  "startedAt": "2026-06-17T14:38:51Z",
+  "completedAt": null,
+  "errorMessage": null
+}
+```
+
+**错误**：
+- `code=404` — `configId` 不存在
+- `code=4090, message="已有任务在运行"` — 全局已有 1 个 RUNNING 任务（CrawlEngine 进程内单任务锁，新任务立即拒绝）
+- `code=400` — DETAIL_ONLY 时 `urls` 为 null 或空数组
+
+### GET /api/v1/tasks
+
+分页任务列表，按 `started_at DESC` 排序。
+
+**Query**：`config_id`（可选，全局列表时不传）、`page`（默认 0）、`size`（默认 20）
+
+**Response `data`**：Spring `Page<TaskResponse>`
+
+### GET /api/v1/tasks/{id}
+
+**Response `data`**：`TaskResponse`（字段同 POST 响应）
+
+**错误**：`code=404` — taskId 不存在
+
+### POST /api/v1/tasks/{id}/stop
+
+优雅停止：设置 `CrawlEngine.stopFlag`，引擎在处理下一个 detail_url / list_item 之前检查并退出。任务状态仍为 `COMPLETED`（非 FAILED），`crawledItems + failedItems` 可能 < `totalItems`。
+
+**Response**：HTTP 200，`data: null`
+
+**错误**：
+- `code=404` — taskId 不存在或未在运行
+
+### DELETE /api/v1/tasks/{id}
+
+级联删除该任务下的全部 list_page / list_item / article / detail_url。删除完成返回 204 No Content。
+
+**Response**：HTTP 204
+
+## 爬取条目（M4）
+
+### GET /api/v1/articles
+
+分页查询爬取条目。**过滤优先级**：`task_id` > `config_id` > 全部。
+
+**Query**：
+- `task_id`（可选，精确过滤该任务的 article）
+- `config_id`（可选，task_id 缺省时按 config 过滤）
+- `keyword`（可选，在 `custom_fields` JSON 文本上做 LIKE，大小写敏感）
+- `page`（默认 0）、`size`（默认 20）
+
+**Response `data`**：Spring `Page<ArticleSummary>`
+
+```json
+{
+  "id": 1,
+  "configId": 3,
+  "url": "https://example.com/article/1",
+  "status": "CRAWLED",
+  "customFields": { "title": "示例标题" },
+  "errorMessage": null,
+  "fetchedAt": "2026-06-17T14:38:56Z"
+}
+```
+
+### GET /api/v1/articles/{id}
+
+**Response `data`**：`ArticleDetail`（在 summary 基础上含 `raw_html` 完整内容）
+
+**错误**：`code=404` — articleId 不存在
+
+### POST /api/v1/articles/export?format=JSON|xlsx
+
+按当前过滤条件导出。**Query**：`format`（`JSON` / `xlsx`，必填）、`config_id`（可选）、`keyword`（可选）。`task_id` 暂不支持导出过滤。
+
+**列集合**：聚合当前过滤结果中所有 article 的 `custom_fields` 键的并集。JSON 导出缺失列填 `null`；xlsx 导出缺失列填空字符串。
+
+**Response**：
+- `format=JSON` → `application/json`，body 为 `Array<{id, url, status, fetched_at, ...customFields}>`（顺序与分页查询一致）
+- `format=xlsx` → `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`，body 为 xlsx 二进制
+

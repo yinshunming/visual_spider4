@@ -82,3 +82,6 @@ e2e/logs/
 e2e/playwright-report/
 e2e/run.log
 e2e/run.pid
+
+# Local agent state
+.claude/
