@@ -4,7 +4,7 @@
 
 定义和管理抽取模板的结构与行为，包括模板的独立拆分（LIST/DETAIL）、渲染后 DOM 提取、多值处理、类型校验以及 raw_html 重新解析能力。
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: 抽取模板结构
 系统 SHALL 为每个配置定义两个独立的抽取模板：LIST 页面字段模板和 DETAIL 页面字段模板。每个模板是该页面类型的所有字段定义的集合。在爬取执行期间，模板应用于该类型的每个页面。

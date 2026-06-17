@@ -4,53 +4,49 @@
 
 通过后端 Playwright 控制的真实浏览器会话，实现页面的可视化加载、实时截图推送、元素点击选择器生成，为用户提供无需手动编写 CSS/XPath 的可视化配置体验。
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: 浏览器会话生命周期
 系统 SHALL 提供单一浏览器会话（同一时间只有一个浏览器上下文），由后端进程直接控制。该会话用于页面导航和选择器生成。
 
-#### 场景：打开页面
+#### Scenario: 打开页面
 - **WHEN** 用户提供要打开的 URL
 - **THEN** 后端启动或复用 Playwright 浏览器会话，导航到 URL，等待 JS 渲染完成，并通过 WebSocket 将页面截图实时推送到前端
 
-#### 场景：复用已有会话
+#### Scenario: 复用已有会话
 - **WHEN** 用户在已有会话中请求打开新页面
 - **THEN** 系统关闭当前页面后在同一会话中打开新 URL；浏览器进程本身不重启
 
-#### 场景：关闭浏览器会话
+#### Scenario: 关闭浏览器会话
 - **WHEN** 用户显式关闭浏览器会话
 - **THEN** 系统关闭当前页面；浏览器上下文可保留以供复用
 
 ### Requirement: 页面截图实时推送
 系统 SHALL 通过 WebSocket 实时向前端推送浏览器视口的截图帧。
 
-#### 场景：截图帧传输
+#### Scenario: 截图帧传输
 - **WHEN** 浏览器页面已加载或发生变化
 - **THEN** 系统在 1 秒内向所有已连接的 WebSocket 客户端推送新的截图帧
 
 ### Requirement: 页面加载状态与错误报告
 系统 SHALL 通过 WebSocket 向前端报告浏览器页面加载状态和任何错误。
 
-#### 场景：页面加载成功
+#### Scenario: 页面加载成功
 - **WHEN** 页面完全加载（包括 JS 渲染）
 - **THEN** 系统通过 WebSocket 发送 "LOADED" 状态消息
 
-#### 场景：页面加载失败
+#### Scenario: 页面加载失败
 - **WHEN** 页面加载失败（网络错误、超时或崩溃）
 - **THEN** 系统通过 WebSocket 发送包含错误描述的 "ERROR" 状态消息
 
 ### Requirement: 点击元素生成选择器
 系统 SHALL 允许用户点击浏览器视口中的任意可见元素，系统 SHALL 针对被点击元素生成 CSS 选择器和 XPath 表达式。
 
-#### 场景：点击生成选择器
+#### Scenario: 点击生成选择器
 - **WHEN** 用户点击浏览器视口中的某个元素
 - **THEN** 系统生成对应的 CSS 选择器和 XPath 表达式并返回给前端
 
 ---
-
-## M2 同步页面加载 MVP（M2 sync page loading MVP）
-
-> 下列 Requirements 描述的是"在引入 Playwright 之前"的 MVP 切片，与上方 Playwright + WebSocket 类 requirement **并存**：同步 HTTP 抓取用于快速预览页面元信息（title / finalUrl / contentLength），后续 Playwright 阶段用于可视化选择器生成。
 
 ### Requirement: HTTP 同步页面加载
 系统 SHALL 提供 `POST /api/v1/page-fetch` 同步端点，接收 JSON `{ "url": string }`，返回 `{ status, finalUrl, title, contentLength, fetchedAt }`；请求体中 `url` 为必填，且 MUST 为合法的 http(s) URL。
@@ -156,10 +152,6 @@
 - **THEN** 路由跳转至 `/configs/:id/preview`，原编辑页状态保留（用户可返回继续编辑）
 
 ---
-
-## M2.5 端到端（Playwright + WebSocket）
-
-> 下列 Requirements 描述 M2.5 通过 Playwright 单会话 + WebSocket 通道实现的可视化选择器生成与字段落库协议，是上方"浏览器会话生命周期 / 点击元素生成选择器"两项的协议级细化。
 
 ### Requirement: 点击元素生成 CSS 与 XPath 候选
 

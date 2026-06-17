@@ -4,7 +4,7 @@
 
 明确 MVP 范围内的系统边界约束，包括单会话/单用户限制、无安全机制、不支持高级爬取策略，以及资源限制和异常降级行为。
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: 单一浏览器会话（MVP 约束）
 系统 SHALL 仅支持同一时间一个活动浏览器会话。这是 MVP 加诸的约束，非底层 Playwright 引擎的技术限制。

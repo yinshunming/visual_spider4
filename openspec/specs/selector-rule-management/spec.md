@@ -4,7 +4,7 @@
 
 定义和管理抽取字段的结构化规则，包括字段名、类型和选择器。字段按页面类型（LIST/DETAIL）分组，支持点击生成选择器的可视化辅助。
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: 按页面类型的字段定义
 对于每个配置，用户 SHALL 为每种页面类型（LIST 页面和 DETAIL 页面）定义零个或多个字段。每个字段包含：field_name（用户自定义文本）、field_type（TEXT | NUMBER | DATE | URL）、selector（CSS 或 XPath 字符串）。

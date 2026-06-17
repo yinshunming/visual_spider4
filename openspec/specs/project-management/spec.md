@@ -6,14 +6,14 @@
 ## Requirements
 ### Requirement: 项目（站点）配置生命周期
 
-系统 SHALL 允许用户创建、读取、更新和删除爬虫项目（以下简称"配置"）。每个配置代表一个目标站点的爬取设置，由 CrawlConfig 实体承载（id、name、pageType、selectorType、status、createdAt、updatedAt）。
+系统 SHALL 允许用户创建、读取、更新和删除爬虫项目（以下简称"配置"）。每个配置代表一个目标站点的爬取设置，由 CrawlConfig 实体承载（id、name、startUrl、pageType、selectorType、status、createdAt、updatedAt）。`startUrl` 为爬取起始 URL，LIST_DETAIL 模式下作为列表页入口，DETAIL_ONLY 模式下作为默认详情页候选（实际爬取 URL 由任务创建时提供的 urls 列表决定，见 [crawl-execution](../crawl-execution/spec.md)）。
 
 #### Scenario: 创建新项目
-- **WHEN** 用户提供项目名称（name）、页面类型（LIST_DETAIL 或 DETAIL_ONLY）、选择器类型（CSS 或 XPATH）
-- **THEN** 系统创建项目，status 默认设为 STOPPED，并返回项目 ID
+- **WHEN** 用户提供项目名称（name）、起始 URL（startUrl）、页面类型（LIST_DETAIL 或 DETAIL_ONLY）、选择器类型（CSS 或 XPATH）
+- **THEN** 系统创建项目，status 默认设为 STOPPED，并返回项目 ID；startUrl 经 UrlGuard 校验（详见 crawl-execution spec），缺失或为空时返回 code=4007
 
 #### Scenario: 更新项目
-- **WHEN** 用户修改现有项目的任何字段（name、pageType、selectorType、status）
+- **WHEN** 用户修改现有项目的任何字段（name、startUrl、pageType、selectorType、status）
 - **THEN** 系统更新项目，并将 updatedAt 设为当前时间戳
 
 #### Scenario: 删除项目
@@ -46,12 +46,12 @@
 
 ### Requirement: 系统 SHALL 允许创建 CrawlConfig（默认 status=STOPPED）
 
-系统 SHALL 支持通过 POST /api/v1/configs 创建配置，name、pageType、selectorType 为必填项；当 status 未显式传入时，系统 MUST 将其默认设为 STOPPED；createdAt 与 updatedAt MUST 由系统在持久化时自动填充。
+系统 SHALL 支持通过 POST /api/v1/configs 创建配置，name、startUrl、pageType、selectorType 为必填项；当 status 未显式传入时，系统 MUST 将其默认设为 STOPPED；createdAt 与 updatedAt MUST 由系统在持久化时自动填充。ConfigResponse 响应体 MUST 包含 startUrl 字段。
 
 #### Scenario: 使用有效数据创建新配置
-- **WHEN** 用户发送 POST /api/v1/configs，包含有效的 name、pageType、selectorType
+- **WHEN** 用户发送 POST /api/v1/configs，包含有效的 name、startUrl、pageType、selectorType
 - **THEN** 系统创建 CrawlConfig，status=STOPPED，createdAt 和 updatedAt 自动设置
-- **AND** 返回 201 Created，包含生成 id 的 ConfigResponse
+- **AND** 返回 201 Created，包含生成 id 与 startUrl 的 ConfigResponse
 
 #### Scenario: 使用 LIST_DETAIL pageType 创建配置
 - **WHEN** 用户发送 POST /api/v1/configs，pageType=LIST_DETAIL
@@ -193,20 +193,41 @@ GET /api/v1/configs/{configId}/fields SHALL 返回该配置关联的字段列表
 - **AND** 支持跳转到 /configs/new 新建配置
 - **AND** 支持跳转到 /configs/:id 编辑配置
 
+### Requirement: 前端 ConfigList SHALL 按页面类型提供爬取启动入口
+
+/vue/ConfigList 的"启动爬取"按钮 SHALL 根据配置 pageType 采取不同交互：
+- DETAIL_ONLY：点击后弹出 URL 输入对话框（StartCrawlDialog），用户每行输入一个详情 URL；提交后将 urls 数组随 POST /api/v1/tasks 一并创建任务。空 URL 列表 MUST 阻止提交并提示。
+- LIST_DETAIL：点击后直接 POST /api/v1/tasks（urls=null），爬取从 config.startUrl 解析列表页。
+
+任务创建成功后 SHALL 跳转到 /tasks/:id 详情页。
+
+#### Scenario: DETAIL_ONLY 启动爬取需先输入 URL
+- **WHEN** 用户点击 DETAIL_ONLY 配置的"启动爬取"
+- **THEN** 弹出 URL 输入对话框，用户输入若干 URL 后提交
+- **AND** 系统 POST /api/v1/tasks 携带 urls 数组创建任务并跳转详情页
+
+#### Scenario: DETAIL_ONLY 空 URL 列表被阻止
+- **WHEN** 用户在 URL 输入对话框中未输入任何 URL 即点启动
+- **THEN** 前端提示"请至少输入一个 URL"，不发起创建请求
+
+#### Scenario: LIST_DETAIL 启动爬取无需输入 URL
+- **WHEN** 用户点击 LIST_DETAIL 配置的"启动爬取"
+- **THEN** 系统 POST /api/v1/tasks（urls=null）创建任务并跳转详情页
+
 ### Requirement: 前端 ConfigEdit 页面 SHALL 同时支持新建和编辑模式
 
 /vue/ConfigEdit SHALL 根据 route.params.id 区分两种模式；新建模式表单为空，编辑模式通过 GET /api/v1/configs/:id 加载并填充数据。
 
 #### Scenario: 新建配置
 - **WHEN** 用户导航到 /configs/new
-- **THEN** 页面显示空表单，包含 name、pageType、selectorType 字段
+- **THEN** 页面显示空表单，包含 name、startUrl、pageType、selectorType 字段
 - **AND** 显示空字段列表用于添加字段
-- **AND** 保存按钮通过 POST /api/v1/configs 创建配置
+- **AND** 保存按钮通过 POST /api/v1/configs 创建配置（payload 携带 startUrl）
 
 #### Scenario: 编辑现有配置
 - **WHEN** 用户导航到 /configs/:id
 - **THEN** 页面通过 GET /api/v1/configs/:id 加载配置数据
-- **AND** 显示已填充的表单
+- **AND** 显示已填充的表单（含 startUrl 回填）
 - **AND** 显示关联字段列表
 - **AND** 保存按钮通过 PUT /api/v1/configs/:id 更新配置（fields 数组全量替换）
 

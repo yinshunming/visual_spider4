@@ -4,7 +4,7 @@
 
 爬取任务的完整生命周期管理，包括 LIST_DETAIL 和 DETAIL_ONLY 两种爬取流程、实时进度报告以及通过原子性停止标志实现的优雅中断。
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: 爬取任务生命周期
 爬取任务代表一次爬取执行。系统 SHALL 允许创建、启动、停止、查询和删除任务。

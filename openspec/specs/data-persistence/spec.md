@@ -4,7 +4,7 @@
 
 爬取结果的持久化存储，包括 raw_html 原始页面保留、custom_fields JSON 灵活存储、查询浏览、数据导出和实体级联删除。
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: 爬取数据实体存储
 系统 SHALL 将爬取数据存储在以下实体中：list_page（每个访问的列表页一个）、list_item（从列表页提取的每个列表项一个）、article（每个访问的详情页一个）、detail_url（DETAIL_ONLY 模式中每个用户提供的 URL 一个）。所有实体保留爬取时的原始 HTML。
@@ -30,6 +30,10 @@
 #### 场景：关键词搜索 + 分页查询文章列表
 - **WHEN** 用户请求 GET /articles?config_id=1&keyword=warrior&page=1&size=20
 - **THEN** 系统返回匹配 config_id=1 且任意 custom_fields 值包含 "warrior" 的文章，分页返回
+
+#### 场景：按任务过滤文章列表
+- **WHEN** 用户请求 GET /articles?task_id=42&page=0&size=20
+- **THEN** 系统返回该任务（task_id=42）下爬取产生的文章，分页返回；task_id 优先级高于 config_id
 
 #### 场景：按 list_page 浏览列表项
 - **WHEN** 用户请求 GET /list-items?list_page_id=5
