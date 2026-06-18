@@ -83,5 +83,9 @@ e2e/playwright-report/
 e2e/run.log
 e2e/run.pid
 
+# Runtime / test scratch artifacts (PIDs, transient ids)
+logs/*.pid
+logs/*.id
+
 # Local agent state
 .claude/
