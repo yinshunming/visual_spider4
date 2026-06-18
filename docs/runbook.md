@@ -99,12 +99,15 @@ mvn spring-boot:run
 
 ```bash
 cd backend
-mvn test                                   # 跑所有测试（详见 docs/tdd-guide.md §当前测试统计；M1 44 + M2 26 + M2.5 31 + M4 ~50+）
-mvn test -Dtest=PageFetchServiceTest       # 单跑某类
-mvn test -Dtest='*ServiceTest'             # 按通配符
+DB_NAME=visual_spider4_test mvn test       # 跑所有测试（详见 docs/tdd-guide.md §当前测试统计；M1 44 + M2 26 + M2.5 31 + M4 ~50+）
+DB_NAME=visual_spider4_test mvn test -Dtest=PageFetchServiceTest   # 单跑某类
+DB_NAME=visual_spider4_test mvn test -Dtest='*ServiceTest'         # 按通配符
 ```
 
+Windows PowerShell 等价：`$env:DB_NAME='visual_spider4_test'; mvn test`
+
 > 跑测试前**必须**先启动本机 PG 并创建 `visual_spider4_test` 库（见上文"创建库"）。
+> **`DB_NAME=visual_spider4_test` 不可省** —— `application-test.yml` 只覆盖 JPA 设置、不覆盖数据源，缺省值指向开发库 `visual_spider4`；测试配置 `ddl-auto: create-drop` 会在开发库建/删表，清空爬取数据。
 
 测试结果按 `@Nested` 分组输出（如 `CrawlConfigServiceTest$Create`）。
 

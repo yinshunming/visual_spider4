@@ -4,6 +4,7 @@ import com.visualspider.entity.Article;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -14,6 +15,14 @@ public interface ArticleRepository extends JpaRepository<Article, Long> {
     Page<Article> findByConfigId(Long configId, Pageable pageable);
 
     Page<Article> findByTaskId(Long taskId, Pageable pageable);
+
+    /**
+     * 删除指定任务下所有 article。删 task 前必须先调,避免 article 的
+     * list_item_id / detail_url_id 外键约束违反(JPA 级联链未覆盖 article)。
+     */
+    @Modifying(clearAutomatically = true)
+    @Query("delete from Article a where a.task.id = :taskId")
+    void deleteByTaskId(@Param("taskId") Long taskId);
 
     /**
      * 在 custom_fields JSON 文本上做 LIKE 关键词搜索(大小写敏感)。

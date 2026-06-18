@@ -82,7 +82,9 @@ public class ArticleQueryService {
     @Transactional(readOnly = true)
     public Set<String> aggregateCustomFieldKeys(Long configId, String keyword) {
         // 仅取最新 200 条做键聚合(导出场景下足够代表列集合)
-        Pageable head = PageRequest.of(0, 200, Sort.by(Sort.Direction.DESC, "fetchedAt"));
+        // 注意:findByConfigIdAndKeyword 是 nativeQuery,Sort 直接拼进 SQL,
+        // 必须用列名 fetched_at 而非属性名 fetchedAt(PG 折叠成 fetchedat 找不到列)。
+        Pageable head = PageRequest.of(0, 200, Sort.by(Sort.Direction.DESC, "fetched_at"));
         Page<Article> top = listArticles(null, configId, keyword, head);
         Set<String> keys = new LinkedHashSet<>();
         for (Article a : top) {

@@ -144,11 +144,28 @@ class CrawlTaskServiceTest {
         }
 
         @Test
-        @DisplayName("delete 不存在抛 TaskNotFoundException,不调 repository.delete")
+        @DisplayName("delete 不存在抛 TaskNotFoundException,不调 deleteByTaskId / deleteById")
         void delete_missing_throwsAndDoesNotDelete() {
-            when(taskRepository.findById(99L)).thenReturn(Optional.empty());
+            when(taskRepository.existsById(99L)).thenReturn(false);
             assertThatThrownBy(() -> service.delete(99L)).isInstanceOf(TaskNotFoundException.class);
+            verify(articleRepository, never()).deleteByTaskId(any());
+            verify(taskRepository, never()).deleteById(any());
             verify(taskRepository, never()).delete(any());
+        }
+
+        @Test
+        @DisplayName("delete 存在时先 bulk 删 articles 再 deleteById task,避免 article 外键约束违反")
+        void delete_existing_deletesArticlesBeforeTask() {
+            when(taskRepository.existsById(1L)).thenReturn(true);
+
+            service.delete(1L);
+
+            // 顺序:existsById → deleteByTaskId → deleteById
+            // deleteById 内部重新加载 task 为 managed,确保级联能正确处理 listPages/detailUrls
+            org.mockito.InOrder inOrder = org.mockito.Mockito.inOrder(taskRepository, articleRepository);
+            inOrder.verify(taskRepository).existsById(1L);
+            inOrder.verify(articleRepository).deleteByTaskId(1L);
+            inOrder.verify(taskRepository).deleteById(1L);
         }
     }
 

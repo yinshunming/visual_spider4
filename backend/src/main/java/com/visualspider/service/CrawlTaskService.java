@@ -102,13 +102,21 @@ public class CrawlTaskService {
 
     /**
      * 级联删除 — 委托给 JPA cascade。
-     * - listPages(ALL + orphanRemoval)→ listItems → articles
-     * - detailUrls(ALL + orphanRemoval)→ articles via detail_url_id(由 service 保证)
+     * - listPages(ALL + orphanRemoval)→ listItems
+     * - detailUrls(ALL + orphanRemoval)
+     * - articles:单向 ManyToOne/OneToOne 无 cascade,必须显式先删,否则
+     *   list_item_id / detail_url_id 外键约束违反。
      */
     @Transactional
     public void delete(Long id) {
-        CrawlTask task = taskRepository.findById(id)
-                .orElseThrow(() -> new TaskNotFoundException(id));
-        taskRepository.delete(task);
+        if (!taskRepository.existsById(id)) {
+            throw new TaskNotFoundException(id);
+        }
+        // Article 不在 JPA 级联链上,必须显式先批量删,避免 list_item_id /
+        // detail_url_id / task_id 外键约束违反。@Modifying clearAutomatically=true
+        // 会清空 L1,所以这里用 deleteById 内部重新加载 task 为 managed,
+        // 确保 em.remove 触发 listPages/detailUrls 的级联删除(orphanRemoval)。
+        articleRepository.deleteByTaskId(id);
+        taskRepository.deleteById(id);
     }
 }
