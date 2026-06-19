@@ -326,7 +326,7 @@ page-fetch:
 |------|---------|------|
 | `state` | `{ state, message }` | `LOADED` / `ERROR` / `CLOSED` |
 | `screenshot` | `{ data: "<base64 png>" }` | 截图帧 |
-| `selectors` | `{ css: { selector, matchCount, samples }, xpath: { ... } }` | 点击返回的候选 |
+| `selectors` | `{ css: { selector, matchCount, samples }, xpath: { ... }, nested }` | 点击返回的候选；`nested=true` 表示命中 iframe / shadow host，本期不深入选择，前端应提示 |
 | `previewResult` | `{ matchCount, samples }` | preview 匹配数 |
 | `saveFieldResult` | `{ ok, fieldId, message }` | saveField 落库结果 |
 | `previewTemplateResult` | `{ result: { fields: [...], warnings: [...] } }` | M3 按模板预览结果，详见下文 |
