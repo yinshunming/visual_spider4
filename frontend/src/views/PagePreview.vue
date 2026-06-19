@@ -40,7 +40,13 @@
             width="1280"
             @click="onImgClick"
           />
-          <div class="hint">该元素位于 iframe / shadow DOM 内,本期不支持深入选择</div>
+          <el-alert
+            v-if="browserStore.selectors?.nested"
+            class="nested-hint"
+            type="warning"
+            :closable="false"
+            title="该元素位于 iframe / shadow DOM 内,本期不支持深入选择"
+          />
         </div>
 
         <div v-else class="status-block placeholder">
@@ -198,6 +204,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useBrowserSessionStore } from '../stores/browserSessionStore'
 import { useExtractionPreviewStore } from '../stores/extractionPreviewStore'
+import { useConfigStore } from '../stores/configStore'
 
 const props = defineProps({
   id: { type: [String, Number], required: false }
@@ -205,6 +212,7 @@ const props = defineProps({
 
 const browserStore = useBrowserSessionStore()
 const extractionStore = useExtractionPreviewStore()
+const configStore = useConfigStore()
 const form = ref({ url: '' })
 const selectedType = ref('css')
 const fieldForm = ref({ fieldName: '', fieldType: 'TEXT', pageType: 'DETAIL' })
@@ -305,6 +313,17 @@ function onExtract() {
 }
 
 onMounted(async () => {
+  // 预填配置的起始 URL,用户可自行修改
+  if (props.id != null && props.id !== '') {
+    try {
+      await configStore.fetchConfigById(props.id)
+      if (configStore.current?.startUrl) {
+        form.value.url = configStore.current.startUrl
+      }
+    } catch (e) {
+      // 取配置失败不阻塞预览,用户可手动输入 URL
+    }
+  }
   await browserStore.connect()
   if (browserStore._ws) {
     extractionStore.setWs(browserStore._ws)
@@ -350,10 +369,8 @@ onUnmounted(() => {
   width: 1280px;
   max-width: none;
 }
-.hint {
+.nested-hint {
   margin-top: 8px;
-  color: #909399;
-  font-size: 12px;
 }
 .selector-block,
 .preview-block,

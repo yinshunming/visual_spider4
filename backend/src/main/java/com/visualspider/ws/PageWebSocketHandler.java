@@ -126,7 +126,7 @@ public class PageWebSocketHandler extends AbstractWebSocketHandler {
             return;
         }
         Object elemInfo = page.evaluate(
-                "({x, y}) => { const el = document.elementFromPoint(x, y); if (!el) return null; const path=[]; let n=el; while(n && n.nodeType===1) { const p=n.parentElement; const sibs = p ? Array.from(p.children).filter(c=>c.tagName===n.tagName) : []; const idx = sibs.indexOf(n)+1; path.unshift(n.tagName.toLowerCase() + (sibs.length>1 ? ':nth-of-type(' + idx + ')' : '')); n = p; } return { tagPath: path.join(' > ') }; }",
+                "({x, y}) => { const el = document.elementFromPoint(x, y); if (!el) return null; const path=[]; let n=el; while(n && n.nodeType===1) { const p=n.parentElement; const sibs = p ? Array.from(p.children).filter(c=>c.tagName===n.tagName) : []; const idx = sibs.indexOf(n)+1; path.unshift(n.tagName.toLowerCase() + (sibs.length>1 ? ':nth-of-type(' + idx + ')' : '')); n = p; } return { tagPath: path.join(' > '), nested: el.tagName==='IFRAME' || !!el.shadowRoot }; }",
                 java.util.Map.of("x", cp.x(), "y", cp.y()));
         if (elemInfo == null) {
             sendError(session, "NO_ELEMENT", "未命中任何元素");
@@ -135,6 +135,7 @@ public class PageWebSocketHandler extends AbstractWebSocketHandler {
         @SuppressWarnings("unchecked")
         java.util.Map<String, Object> info = (java.util.Map<String, Object>) elemInfo;
         String tagPath = (String) info.get("tagPath");
+        boolean nested = Boolean.TRUE.equals(info.get("nested"));
         String docHtml = (String) page.evaluate("() => document.documentElement.outerHTML");
         Document doc = Jsoup.parse(docHtml);
         Element target = findByTagPath(doc, tagPath);
@@ -143,7 +144,7 @@ public class PageWebSocketHandler extends AbstractWebSocketHandler {
             return;
         }
         SelectorPairResponse pair = selectorService.craft(target, doc);
-        send(session, "selectors", pair);
+        send(session, "selectors", new SelectorPairResponse(pair.css(), pair.xpath(), nested));
     }
 
     private Element findByTagPath(Document doc, String tagPath) {

@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import PagePreview from './PagePreview.vue'
 import { useBrowserSessionStore } from '../stores/browserSessionStore'
+import { useConfigStore } from '../stores/configStore'
 
 describe('PagePreview.vue', () => {
   beforeEach(() => {
@@ -69,6 +70,50 @@ describe('PagePreview.vue', () => {
       const img = wrapper.find('img.screenshot')
       await img.trigger('click', { offsetX: 100, offsetY: 50 })
       expect(clickSpy).toHaveBeenCalledWith(100, 50)
+    })
+  })
+
+  describe('默认 URL 预填', () => {
+    it('进入页面时用配置的 startUrl 预填 URL 框', async () => {
+      const browserStore = useBrowserSessionStore()
+      vi.spyOn(browserStore, 'connect').mockResolvedValue()
+      vi.spyOn(browserStore, 'openSession').mockResolvedValue()
+      const configStore = useConfigStore()
+      vi.spyOn(configStore, 'fetchConfigById').mockImplementation(async () => {
+        configStore.current = { id: 7, startUrl: 'https://sports.sina.com.cn/nba/' }
+      })
+      const wrapper = mount(PagePreview, {
+        props: { id: 7 },
+        global: { stubs: { 'el-input': true, 'el-button': true, 'el-form': true, 'el-form-item': true, 'el-alert': true, 'el-radio': true, 'el-radio-group': true, 'el-select': true, 'el-option': true } }
+      })
+      await new Promise(r => setTimeout(r, 10))
+      expect(configStore.fetchConfigById).toHaveBeenCalledWith(7)
+      expect(wrapper.vm.form.url).toBe('https://sports.sina.com.cn/nba/')
+    })
+  })
+
+  describe('iframe / shadow DOM 提示', () => {
+    const stubs = { 'el-input': true, 'el-button': true, 'el-form': true, 'el-form-item': true, 'el-alert': true, 'el-radio': true, 'el-radio-group': true, 'el-select': true, 'el-option': true }
+    const MSG = '该元素位于 iframe / shadow DOM 内,本期不支持深入选择'
+
+    it('selectors.nested=true 时显示提示', async () => {
+      const store = useBrowserSessionStore()
+      store.lastScreenshot = 'BASE64PNG'
+      store.selectors = { css: { selector: 'iframe', matchCount: 1, samples: [] }, xpath: { selector: '//iframe', matchCount: 1, samples: [] }, nested: true }
+      const wrapper = mount(PagePreview, { props: { id: 1 }, global: { stubs } })
+      await wrapper.vm.$nextTick()
+      const alert = wrapper.find('el-alert-stub')
+      expect(alert.exists()).toBe(true)
+      expect(alert.attributes('title')).toContain(MSG)
+    })
+
+    it('selectors.nested 缺省时不显示提示', async () => {
+      const store = useBrowserSessionStore()
+      store.lastScreenshot = 'BASE64PNG'
+      store.selectors = { css: { selector: 'div.title', matchCount: 3, samples: ['a'] }, xpath: { selector: '//div', matchCount: 3, samples: ['a'] } }
+      const wrapper = mount(PagePreview, { props: { id: 1 }, global: { stubs } })
+      await wrapper.vm.$nextTick()
+      expect(wrapper.find('el-alert-stub').exists()).toBe(false)
     })
   })
 
