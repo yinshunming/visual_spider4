@@ -39,6 +39,16 @@ describe('useBrowserSessionStore', () => {
     })
   })
 
+  describe('scroll', () => {
+    it('调 ws.send 发出 {type:scroll, payload:{dy}}', () => {
+      const store = useBrowserSessionStore()
+      const send = vi.fn()
+      store._ws = { send }
+      store.scroll(600)
+      expect(send).toHaveBeenCalledWith({ type: 'scroll', payload: { dy: 600 } })
+    })
+  })
+
   describe('preview', () => {
     it('调 ws.send 发出 preview 消息', () => {
       const store = useBrowserSessionStore()

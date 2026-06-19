@@ -73,6 +73,48 @@ describe('PagePreview.vue', () => {
     })
   })
 
+  describe('滚轮转发', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('连续滚轮节流累积 deltaY,120ms 后发一次 scroll', async () => {
+      const store = useBrowserSessionStore()
+      store.lastScreenshot = 'BASE64PNG'
+      const scrollSpy = vi.spyOn(store, 'scroll').mockReturnValue()
+      const wrapper = mount(PagePreview, {
+        props: { id: 1 },
+        global: { stubs: { 'el-input': true, 'el-button': true, 'el-form': true, 'el-form-item': true, 'el-alert': true, 'el-radio': true, 'el-radio-group': true, 'el-select': true, 'el-option': true } }
+      })
+      await wrapper.vm.$nextTick()
+      const block = wrapper.find('.screenshot-block')
+      await block.trigger('wheel', { deltaY: 100 })
+      await block.trigger('wheel', { deltaY: 100 })
+      await block.trigger('wheel', { deltaY: 100 })
+      expect(scrollSpy).not.toHaveBeenCalled()
+      vi.advanceTimersByTime(120)
+      expect(scrollSpy).toHaveBeenCalledTimes(1)
+      expect(scrollSpy).toHaveBeenCalledWith(300)
+    })
+
+    it('未加载截图时不转发滚轮', async () => {
+      const store = useBrowserSessionStore()
+      store.lastScreenshot = null
+      const scrollSpy = vi.spyOn(store, 'scroll').mockReturnValue()
+      const wrapper = mount(PagePreview, {
+        props: { id: 1 },
+        global: { stubs: { 'el-input': true, 'el-button': true, 'el-form': true, 'el-form-item': true, 'el-alert': true, 'el-radio': true, 'el-radio-group': true, 'el-select': true, 'el-option': true } }
+      })
+      const block = wrapper.find('.screenshot-block')
+      expect(block.exists()).toBe(false)
+      vi.advanceTimersByTime(120)
+      expect(scrollSpy).not.toHaveBeenCalled()
+    })
+  })
+
   describe('默认 URL 预填', () => {
     it('进入页面时用配置的 startUrl 预填 URL 框', async () => {
       const browserStore = useBrowserSessionStore()

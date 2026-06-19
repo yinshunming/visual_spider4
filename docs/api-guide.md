@@ -315,6 +315,7 @@ page-fetch:
 |------|---------|------|
 | `load` | `{ url, configId }` | 加载 URL；首条消息携带 configId 用于后续 saveField |
 | `click` | `{ x, y }` | 视口坐标点击；返回 `selectors` 消息 |
+| `scroll` | `{ dy }` | 滚动 Playwright 页面（`window.scrollBy(0, dy)`，正向下/负向上）后重推视口截图；截图仍为 1280×800 视口，点击坐标始终对齐当前视口 |
 | `preview` | `{ selectorType: "css"\|"xpath", selector }` | 注入高亮 + 推新截图 |
 | `saveField` | `{ pageType, fieldName, fieldType, selector }` | 落库到 crawl_field（依赖 session 绑定的 configId） |
 | `previewTemplate` | `{ pageType: "LIST"\|"DETAIL" }` | M3 按模板批量预览：对当前 Playwright Page 上指定 pageType 下所有 crawl_field 执行选择器 + 校验 |

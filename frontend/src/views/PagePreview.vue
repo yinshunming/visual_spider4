@@ -32,7 +32,7 @@
 
     <el-tabs v-model="activeTab" class="preview-tabs">
       <el-tab-pane label="可视化造字段" name="craft">
-        <div v-if="browserStore.lastScreenshot" class="screenshot-block">
+        <div v-if="browserStore.lastScreenshot" class="screenshot-block" @wheel.prevent="onWheel">
           <img
             :src="`data:image/png;base64,${browserStore.lastScreenshot}`"
             alt="page screenshot"
@@ -292,6 +292,22 @@ function onImgClick(evt) {
   browserStore.click(x, y)
 }
 
+// 鼠标滚轮转发给后端滚动 Playwright 页面并重推视口截图;
+// 节流累积 deltaY,避免高频滚轮触发截图洪流。
+let scrollTimer = null
+const scrollPending = ref(0)
+function onWheel(evt) {
+  if (!browserStore.lastScreenshot) return
+  scrollPending.value += evt.deltaY
+  if (scrollTimer) return
+  scrollTimer = setTimeout(() => {
+    const dy = scrollPending.value
+    scrollPending.value = 0
+    scrollTimer = null
+    if (dy !== 0) browserStore.scroll(dy)
+  }, 120)
+}
+
 function onPreview() {
   if (!selectedCandidate.value) return
   browserStore.preview(selectedType.value, selectedCandidate.value.selector)
@@ -332,6 +348,10 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  if (scrollTimer) {
+    clearTimeout(scrollTimer)
+    scrollTimer = null
+  }
   browserStore.closeSession()
   browserStore.disconnect()
 })

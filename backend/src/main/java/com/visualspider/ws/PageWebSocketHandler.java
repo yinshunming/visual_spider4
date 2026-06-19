@@ -13,6 +13,7 @@ import com.visualspider.dto.ws.PreviewTemplatePayload;
 import com.visualspider.dto.ws.PreviewTemplateResultPayload;
 import com.visualspider.dto.ws.SaveFieldPayload;
 import com.visualspider.dto.ws.SaveFieldResultPayload;
+import com.visualspider.dto.ws.ScrollPayload;
 import com.visualspider.dto.ws.ScreenshotPayload;
 import com.visualspider.dto.ws.StatePayload;
 import com.visualspider.dto.ws.WsMessage;
@@ -88,6 +89,7 @@ public class PageWebSocketHandler extends AbstractWebSocketHandler {
             switch (type == null ? "" : type) {
                 case "load" -> handleLoad(session, payload);
                 case "click" -> handleClick(session, payload);
+                case "scroll" -> handleScroll(session, payload);
                 case "preview" -> handlePreview(session, payload);
                 case "saveField" -> handleSaveField(session, payload);
                 case "previewTemplate" -> handlePreviewTemplate(session, payload);
@@ -145,6 +147,18 @@ public class PageWebSocketHandler extends AbstractWebSocketHandler {
         }
         SelectorPairResponse pair = selectorService.craft(target, doc);
         send(session, "selectors", new SelectorPairResponse(pair.css(), pair.xpath(), nested));
+    }
+
+    private void handleScroll(WebSocketSession session, Object payload) throws IOException {
+        ScrollPayload sp = mapper.convertValue(payload, ScrollPayload.class);
+        var page = browserService.getPage();
+        if (page == null) {
+            sendError(session, "NO_SESSION", "浏览器未就绪");
+            return;
+        }
+        // 滚动后视口变化,elementFromPoint 仍用当前视口坐标,点击坐标自动对齐
+        page.evaluate("(dy) => { window.scrollBy(0, dy); }", sp.dy());
+        pushScreenshot(session);
     }
 
     private Element findByTagPath(Document doc, String tagPath) {

@@ -98,6 +98,31 @@ class PageWebSocketHandlerTest {
     }
 
     @Test
+    @DisplayName("scroll 消息调 page.evaluate scrollBy 并推 screenshot")
+    void scrollDispatches() throws Exception {
+        com.microsoft.playwright.Page page = mock(com.microsoft.playwright.Page.class);
+        when(browserService.getPage()).thenReturn(page);
+        when(highlighter.screenshotBytes()).thenReturn(new byte[]{1, 2, 3});
+
+        String json = mapper.writeValueAsString(new WsMessage<>("scroll", java.util.Map.of("dy", 600)));
+        handler.handleTextMessage(session, new TextMessage(json));
+
+        verify(page).evaluate(contains("scrollBy"), eq(600));
+        verify(session, atLeastOnce()).sendMessage(any(TextMessage.class));
+    }
+
+    @Test
+    @DisplayName("scroll 无 Page → 推 error NO_SESSION,不调 evaluate")
+    void scrollNoSession() throws Exception {
+        when(browserService.getPage()).thenReturn(null);
+
+        String json = mapper.writeValueAsString(new WsMessage<>("scroll", java.util.Map.of("dy", 100)));
+        handler.handleTextMessage(session, new TextMessage(json));
+
+        verify(session, atLeastOnce()).sendMessage(any(TextMessage.class));
+    }
+
+    @Test
     @DisplayName("saveField 消息调 fieldService.addField 并推 saveFieldResult")
     void saveFieldDispatches() throws Exception {
         CrawlField saved = new CrawlField();

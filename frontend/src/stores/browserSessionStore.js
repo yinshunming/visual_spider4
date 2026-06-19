@@ -73,6 +73,11 @@ export const useBrowserSessionStore = defineStore('browserSession', {
       this._ws.send({ type: 'click', payload: { x, y } })
     },
 
+    scroll(dy) {
+      if (!this._ws) return
+      this._ws.send({ type: 'scroll', payload: { dy } })
+    },
+
     preview(selectorType, selector) {
       if (!this._ws) return
       this._ws.send({ type: 'preview', payload: { selectorType, selector } })
