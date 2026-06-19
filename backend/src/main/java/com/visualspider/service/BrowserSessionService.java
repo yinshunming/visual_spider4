@@ -113,9 +113,11 @@ public class BrowserSessionService {
                     .setDeviceScaleFactor(deviceScaleFactor));
             page = context.newPage();
             page.setDefaultNavigationTimeout(navigationTimeoutMs);
-            page.addStyleTag(new Page.AddStyleTagOptions().setContent(HIGHLIGHT_STYLE));
             page.navigate(url);
             page.waitForLoadState(com.microsoft.playwright.options.LoadState.NETWORKIDLE);
+            // 样式注入必须在 navigate 之后:navigate 会替换 document,注入到 about:blank
+            // 的 <style> 会随旧 document 一起丢失,导致 .vs-highlight 无样式、红框不显示。
+            page.addStyleTag(new Page.AddStyleTagOptions().setContent(HIGHLIGHT_STYLE));
             currentUrl = url;
         } catch (NavigationException e) {
             throw e;
