@@ -37,7 +37,7 @@ visual_spider4/
 │   │   │   └── ws/                   # M2.5 WsMessage + 9 个 payload record（M3 新增 previewTemplate/Result）
 │   │   ├── enums/                    # PageType / SelectorType / FieldType / ConfigStatus / FieldPageType / PageFetchStatus（M2）/ BrowserSessionStatus（M2.5）/ M4：TaskStatus / ItemStatus / DetailUrlStatus
 │   │   ├── exception/                # BusinessException / ConfigNotFound / InvalidUrl / BlockedAddress / FetchTimeout / FetchFailed / BrowserSession* / Navigation / M4：TaskAlreadyRunning（code=4090）/ StartUrlInvalid（code=4007）/ ArticleNotFound
-│   │   └── ws/                       # M2.5 PageWebSocketHandler（处理 load/click/preview/saveField/close/previewTemplate）
+│   │   └── ws/                       # M2.5 PageWebSocketHandler（处理 load/click/scroll/preview/saveField/close/previewTemplate）
 │   ├── src/test/                     # 101 个测试（M1 44 + M2 26 + M2.5 31）+ M4：CrawlEngine / CrawlTaskService / ArticleController 等（详见 docs/tdd-guide.md §当前测试统计）
 │   ├── src/test/resources/mockito-extensions/  # mock-maker-inline（mock final Playwright）
 │   ├── src/main/resources/application.yml
@@ -137,7 +137,7 @@ POST   /page-fetch               M2 同步页面抓取（HTTP 状态码 + body c
 POST   /browser/sessions         M2.5 打开 Playwright 会话（单例，重复 open → 409）
 DELETE /browser/sessions/{id}   M2.5 关闭会话
 GET    /browser/sessions         M2.5 查询当前会话状态
-WS     /ws/page                  M2.5 + M3 WebSocket 端点（load/click/preview/saveField/previewTemplate/close 六类消息）
+WS     /ws/page                  M2.5 + M3 WebSocket 端点（load/click/scroll/preview/saveField/previewTemplate/close 七类消息）
 POST   /tasks                    M4 创建任务（DETAIL_ONLY 必传 urls[]；LIST_DETAIL 传 null）
 GET    /tasks                    M4 任务列表（?config_id=&page=&size=）
 GET    /tasks/{id}               M4 任务详情（含 total/crawled/failed 进度）

@@ -139,7 +139,7 @@ com.visualspider/
 │   ├── ArticleNotFoundException.java             # M4 code=404
 │   └── GlobalExceptionHandler.java      # @RestControllerAdvice → ApiResponse
 └── ws/                                     # M2.5 + M3 WebSocket 端点
-    └── PageWebSocketHandler.java          # 处理 load/click/preview/saveField/close/previewTemplate 六种消息
+    └── PageWebSocketHandler.java          # 处理 load/click/scroll/preview/saveField/close/previewTemplate 七种消息
 ```
 
 ### 数据模型
